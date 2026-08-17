@@ -13,4 +13,8 @@ def buscar_en_wacli(query):
 
 @app.get("/buscar")
 def buscar(q: str):
-    return buscar_en_wacli(q)
+    try:
+        return buscar_en_wacli(q)
+    except Exception as e:
+        return {"error": str(e)}
+
