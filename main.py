@@ -18,3 +18,11 @@ def buscar(q: str):
     except Exception as e:
         return {"error": str(e)}
 
+@app.get("/debug")
+def debug():
+    import sqlite3
+    conn = sqlite3.connect("data/wacli.db")
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
+    tablas = cur.fetchall()
+    return {"tablas": tablas}
