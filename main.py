@@ -6,10 +6,11 @@ app = FastAPI()
 def buscar_en_wacli(query):
     conn = sqlite3.connect("data/wacli.db")
     cur = conn.cursor()
-    cur.execute("SELECT data FROM messages WHERE data LIKE ?", ('%' + query + '%',))
+    cur.execute("SELECT text FROM messages WHERE text LIKE ?", ('%' + query + '%',))
     resultados = cur.fetchall()
     conn.close()
     return [r[0] for r in resultados]
+
 
 @app.get("/buscar")
 def buscar(q: str):
