@@ -2,7 +2,7 @@ from fastapi import FastAPI
 import sqlite3
 # forcing render rebuild
 app = FastAPI()
-
+# forcing rebuild
 def buscar_en_wacli(query):
     conn = sqlite3.connect("wacli.db")
     cur = conn.cursor()
