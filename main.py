@@ -4,7 +4,7 @@ import sqlite3
 app = FastAPI()
 # forcing rebuild
 def buscar_en_wacli(query):
-    conn = sqlite3.connect("wacli.db")
+    conn = sqlite3.connect("data/wacli.db")
     cur = conn.cursor()
     cur.execute("SELECT mensaje FROM mensajes WHERE mensaje LIKE ?", ('%' + query + '%',))
     resultados = cur.fetchall()
