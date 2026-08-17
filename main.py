@@ -26,3 +26,12 @@ def debug():
     cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
     tablas = cur.fetchall()
     return {"tablas": tablas}
+
+@app.get("/debug2")
+def debug2():
+    conn = sqlite3.connect("data/wacli.db")
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(messages);")
+    columnas = cur.fetchall()
+    return {"columnas": columnas}
+
