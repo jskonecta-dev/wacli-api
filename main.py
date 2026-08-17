@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 import sqlite3
-
+# forcing render rebuild
 app = FastAPI()
 
 def buscar_en_wacli(query):
