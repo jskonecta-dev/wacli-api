@@ -2,11 +2,14 @@ from fastapi import FastAPI
 import sqlite3
 from datetime import datetime
 from openai import OpenAI
+import os
 
 app = FastAPI()
 
 # CLIENTE OPENAI
-client = OpenAI(api_key="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")
+# client = OpenAI(api_key="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")
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 # -----------------------------
