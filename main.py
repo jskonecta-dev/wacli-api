@@ -98,7 +98,7 @@ Mensajes encontrados:
 """
 
     respuesta = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": "Eres un analista de conversaciones de WhatsApp."},
             {"role": "user", "content": prompt}
