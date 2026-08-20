@@ -1,5 +1,6 @@
 from fastapi import FastAPI
-import sqlite3
+# import sqlite3
+import psycopg2
 from datetime import datetime
 from openai import OpenAI
 import numpy as np
@@ -14,7 +15,17 @@ app = FastAPI()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-
+# -----------------------------
+# funcion nueva conexion a neon data base
+# -----------------------------
+def get_conn():
+    return psycopg2.connect(
+        host=os.getenv("PGHOST"),
+        database=os.getenv("PGDATABASE"),
+        user=os.getenv("PGUSER"),
+        password=os.getenv("PGPASSWORD"),
+        port=os.getenv("PGPORT")
+    )
 # -----------------------------
 # funcion convertir time stamp
 # -----------------------------
@@ -47,8 +58,10 @@ def convertir_timestamp(ts):
 # BÚSQUEDA SIMPLE
 # -----------------------------
 def buscar_en_wacli(query):
-    conn = sqlite3.connect("data/wacli.db")
+    
+    conn = get_conn()
     cur = conn.cursor()
+
     cur.execute("SELECT text FROM messages WHERE text LIKE ?", ('%' + query + '%',))
     resultados = cur.fetchall()
     conn.close()
@@ -59,9 +72,10 @@ def buscar_en_wacli(query):
 # -----------------------------
 @app.get("/crear_tabla_embeddings")
 def crear_tabla():
-    conn = sqlite3.connect("data/wacli.db")
+    #conn = sqlite3.connect("data/wacli.db")
+    #cur = conn.cursor()
+    conn = get_conn()
     cur = conn.cursor()
-
     cur.execute("""
     CREATE TABLE IF NOT EXISTS message_embeddings (
         message_id INTEGER PRIMARY KEY,
@@ -111,9 +125,10 @@ def buscar_semantico(q: str, k: int = 5):
 
         query_vec = np.array(query_emb, dtype=np.float32)
 
-        conn = sqlite3.connect("data/wacli.db")
+        #conn = sqlite3.connect("data/wacli.db")
+        #cur = conn.cursor()
+        conn = get_conn()
         cur = conn.cursor()
-
         cur.execute("SELECT message_id, text, chat_name, sender_name, ts, embedding FROM message_embeddings")
         rows = cur.fetchall()
 
@@ -151,9 +166,10 @@ def buscar_semantico(q: str, k: int = 5):
 # BÚSQUEDA AVANZADA (chat, fecha, hora, texto)
 # -----------------------------
 def buscar_mensajes(query):
-    conn = sqlite3.connect("data/wacli.db")
+    #conn = sqlite3.connect("data/wacli.db")
+    #cur = conn.cursor()
+    conn = get_conn()
     cur = conn.cursor()
-
     cur.execute("""
         SELECT chat_name, sender_name, ts, text
         FROM messages
@@ -237,7 +253,9 @@ Mensajes encontrados:
 # -----------------------------
 @app.get("/debug")
 def debug():
-    conn = sqlite3.connect("data/wacli.db")
+    #conn = sqlite3.connect("data/wacli.db")
+    #cur = conn.cursor()
+    conn = get_conn()
     cur = conn.cursor()
     cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
     tablas = cur.fetchall()
@@ -249,7 +267,9 @@ def debug():
 # -----------------------------
 @app.get("/debug2")
 def debug2():
-    conn = sqlite3.connect("data/wacli.db")
+    #conn = sqlite3.connect("data/wacli.db")
+    #cur = conn.cursor()
+    conn = get_conn()
     cur = conn.cursor()
     cur.execute("PRAGMA table_info(messages);")
     columnas = cur.fetchall()
