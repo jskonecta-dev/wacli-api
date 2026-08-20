@@ -83,10 +83,17 @@ def buscar(q: str):
     except Exception as e:
         return {"error": str(e)}
 
+# @app.get("/generar_embeddings")
+# def generar_embeddings_api():
+    # import generar_embeddings
+    # return {"status": "embeddings generados"}
 @app.get("/generar_embeddings")
 def generar_embeddings_api():
-    import generar_embeddings
-    return {"status": "embeddings generados"}
+    try:
+        import generar_embeddings
+        return {"status": "embeddings generados"}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 # -----------------------------
