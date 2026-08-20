@@ -2,7 +2,10 @@ from fastapi import FastAPI
 import sqlite3
 from datetime import datetime
 from openai import OpenAI
+import numpy as np
 import os
+
+client = OpenAI()
 
 app = FastAPI()
 
@@ -94,7 +97,50 @@ def generar_embeddings_api():
         return {"status": "embeddings generados"}
     except Exception as e:
         return {"error": str(e)}
+# -------------------------
+# ⭐ AQUI VA /buscar_semantico
+# -------------------------
 
+@app.get("/buscar_semantico")
+def buscar_semantico(q: str, k: int = 5):
+    # Crear embedding de la consulta
+    query_emb = client.embeddings.create(
+        model="text-embedding-3-small",
+        input=q
+    ).data[0].embedding
+
+    query_vec = np.array(query_emb, dtype=np.float32)
+
+    conn = sqlite3.connect("data/wacli.db")
+    cur = conn.cursor()
+
+    cur.execute("SELECT message_id, text, chat_name, sender_name, ts, embedding FROM message_embeddings")
+    rows = cur.fetchall()
+
+    resultados = []
+
+    for message_id, text, chat, sender, ts, emb_blob in rows:
+        emb_vec = np.frombuffer(emb_blob, dtype=np.float32)
+
+        sim = np.dot(query_vec, emb_vec) / (np.linalg.norm(query_vec) * np.linalg.norm(emb_vec))
+
+        resultados.append({
+            "message_id": message_id,
+            "text": text,
+            "chat": chat,
+            "sender": sender,
+            "ts": ts,
+            "similaridad": float(sim)
+        })
+
+    conn.close()
+
+    resultados.sort(key=lambda x: x["similaridad"], reverse=True)
+
+    return {
+        "query": q,
+        "resultados": resultados[:k]
+    }
 
 # -----------------------------
 # BÚSQUEDA AVANZADA (chat, fecha, hora, texto)
