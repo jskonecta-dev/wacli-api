@@ -51,6 +51,30 @@ def buscar_en_wacli(query):
     conn.close()
     return [r[0] for r in resultados]
 
+# -----------------------------
+# endpoint temporal para ejecutar nuevo sript
+# -----------------------------
+@app.get("/crear_tabla_embeddings")
+def crear_tabla():
+    conn = sqlite3.connect("data/wacli.db")
+    cur = conn.cursor()
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS message_embeddings (
+        message_id INTEGER PRIMARY KEY,
+        text TEXT,
+        chat_name TEXT,
+        sender_name TEXT,
+        ts INTEGER,
+        embedding BLOB
+    );
+    """)
+
+    conn.commit()
+    conn.close()
+
+    return {"status": "tabla creada"}
+
 
 @app.get("/buscar")
 def buscar(q: str):
