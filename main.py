@@ -13,6 +13,34 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 # -----------------------------
+# funcion convertir time stamp
+# -----------------------------
+def convertir_timestamp(ts):
+    """
+    Convierte automáticamente timestamps en:
+    - segundos
+    - milisegundos
+    - microsegundos
+    """
+
+    ts = int(ts)
+
+    # Si es demasiado pequeño, probablemente está en segundos
+    if ts < 2000000000:
+        # segundos
+        return datetime.fromtimestamp(ts)
+
+    # Si es demasiado grande, probablemente está en microsegundos
+    if ts > 2000000000000:
+        # microsegundos → convertir a segundos
+        return datetime.fromtimestamp(ts / 1_000_000)
+
+    # Caso normal: milisegundos
+    return datetime.fromtimestamp(ts / 1000)
+
+
+
+# -----------------------------
 # BÚSQUEDA SIMPLE
 # -----------------------------
 def buscar_en_wacli(query):
@@ -52,8 +80,12 @@ def buscar_mensajes(query):
 
     mensajes = []
     for chat, sender, ts, text in rows:
-        fecha = datetime.fromtimestamp(ts/1000).strftime("%Y-%m-%d")
-        hora = datetime.fromtimestamp(ts/1000).strftime("%H:%M:%S")
+        # fecha = datetime.fromtimestamp(ts/1000).strftime("%Y-%m-%d")
+        # hora = datetime.fromtimestamp(ts/1000).strftime("%H:%M:%S")
+        dt = convertir_timestamp(ts)
+        fecha = dt.strftime("%Y-%m-%d")
+        hora = dt.strftime("%H:%M:%S")
+
 
         mensajes.append({
             "chat": chat,
