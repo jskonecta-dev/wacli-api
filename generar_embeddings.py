@@ -5,9 +5,10 @@ from openai import OpenAI
 client = OpenAI()
 
 def generar_embeddings():
-    conn = sqlite3.connect("data/wacli.db")
+    #conn = sqlite3.connect("data/wacli.db")
+    #cur = conn.cursor()
+    conn = get_conn()
     cur = conn.cursor()
-
     cur.execute("SELECT rowid, text, chat_name, sender_name, ts FROM messages")
     rows = cur.fetchall()
 
