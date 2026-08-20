@@ -1,22 +1,15 @@
 from fastapi import FastAPI
-# import sqlite3
 import psycopg2
 from datetime import datetime
 from openai import OpenAI
 import numpy as np
 import os
 
-client = OpenAI()
-
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 app = FastAPI()
 
-# CLIENTE OPENAI
-# client = OpenAI(api_key="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")
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
 # -----------------------------
-# funcion nueva conexion a neon data base
+# CONEXIÓN A NEON POSTGRESQL
 # -----------------------------
 def get_conn():
     return psycopg2.connect(
@@ -26,73 +19,60 @@ def get_conn():
         password=os.getenv("PGPASSWORD"),
         port=os.getenv("PGPORT")
     )
+
 # -----------------------------
-# funcion convertir time stamp
+# CONVERTIR TIMESTAMP
 # -----------------------------
 def convertir_timestamp(ts):
-    """
-    Convierte automáticamente timestamps en:
-    - segundos
-    - milisegundos
-    - microsegundos
-    """
-
     ts = int(ts)
 
-    # Si es demasiado pequeño, probablemente está en segundos
     if ts < 2000000000:
-        # segundos
         return datetime.fromtimestamp(ts)
 
-    # Si es demasiado grande, probablemente está en microsegundos
     if ts > 2000000000000:
-        # microsegundos → convertir a segundos
         return datetime.fromtimestamp(ts / 1_000_000)
 
-    # Caso normal: milisegundos
     return datetime.fromtimestamp(ts / 1000)
-
-
 
 # -----------------------------
 # BÚSQUEDA SIMPLE
 # -----------------------------
 def buscar_en_wacli(query):
-    
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("SELECT text FROM messages WHERE text LIKE ?", ('%' + query + '%',))
+    cur.execute("SELECT text FROM messages WHERE text LIKE %s", ('%' + query + '%',))
     resultados = cur.fetchall()
+
     conn.close()
     return [r[0] for r in resultados]
 
 # -----------------------------
-# endpoint temporal para ejecutar nuevo sript
+# CREAR TABLA EMBEDDINGS
 # -----------------------------
 @app.get("/crear_tabla_embeddings")
 def crear_tabla():
-    #conn = sqlite3.connect("data/wacli.db")
-    #cur = conn.cursor()
     conn = get_conn()
     cur = conn.cursor()
+
     cur.execute("""
-    CREATE TABLE IF NOT EXISTS message_embeddings (
-        message_id INTEGER PRIMARY KEY,
-        text TEXT,
-        chat_name TEXT,
-        sender_name TEXT,
-        ts INTEGER,
-        embedding BLOB
-    );
+        CREATE TABLE IF NOT EXISTS message_embeddings (
+            message_id INT PRIMARY KEY,
+            text TEXT,
+            chat_name TEXT,
+            sender_name TEXT,
+            ts BIGINT,
+            embedding BYTEA
+        );
     """)
 
     conn.commit()
     conn.close()
-
     return {"status": "tabla creada"}
 
-
+# -----------------------------
+# BÚSQUEDA SIMPLE API
+# -----------------------------
 @app.get("/buscar")
 def buscar(q: str):
     try:
@@ -100,10 +80,9 @@ def buscar(q: str):
     except Exception as e:
         return {"error": str(e)}
 
-# @app.get("/generar_embeddings")
-# def generar_embeddings_api():
-    # import generar_embeddings
-    # return {"status": "embeddings generados"}
+# -----------------------------
+# GENERAR EMBEDDINGS
+# -----------------------------
 @app.get("/generar_embeddings")
 def generar_embeddings_api():
     try:
@@ -111,13 +90,13 @@ def generar_embeddings_api():
         return {"status": "embeddings generados"}
     except Exception as e:
         return {"error": str(e)}
-# -------------------------
-# ⭐ AQUI VA /buscar_semantico
-# -------------------------
+
+# -----------------------------
+# BÚSQUEDA SEMÁNTICA
+# -----------------------------
 @app.get("/buscar_semantico")
 def buscar_semantico(q: str, k: int = 5):
     try:
-        # Crear embedding de la consulta
         query_emb = client.embeddings.create(
             model="text-embedding-3-small",
             input=q
@@ -125,10 +104,9 @@ def buscar_semantico(q: str, k: int = 5):
 
         query_vec = np.array(query_emb, dtype=np.float32)
 
-        #conn = sqlite3.connect("data/wacli.db")
-        #cur = conn.cursor()
         conn = get_conn()
         cur = conn.cursor()
+
         cur.execute("SELECT message_id, text, chat_name, sender_name, ts, embedding FROM message_embeddings")
         rows = cur.fetchall()
 
@@ -160,20 +138,17 @@ def buscar_semantico(q: str, k: int = 5):
     except Exception as e:
         return {"error": str(e)}
 
-
-
 # -----------------------------
-# BÚSQUEDA AVANZADA (chat, fecha, hora, texto)
+# BÚSQUEDA AVANZADA
 # -----------------------------
 def buscar_mensajes(query):
-    #conn = sqlite3.connect("data/wacli.db")
-    #cur = conn.cursor()
     conn = get_conn()
     cur = conn.cursor()
+
     cur.execute("""
         SELECT chat_name, sender_name, ts, text
         FROM messages
-        WHERE text LIKE ?
+        WHERE text LIKE %s
         ORDER BY ts DESC
         LIMIT 50
     """, ('%' + query + '%',))
@@ -183,12 +158,9 @@ def buscar_mensajes(query):
 
     mensajes = []
     for chat, sender, ts, text in rows:
-        # fecha = datetime.fromtimestamp(ts/1000).strftime("%Y-%m-%d")
-        # hora = datetime.fromtimestamp(ts/1000).strftime("%H:%M:%S")
         dt = convertir_timestamp(ts)
         fecha = dt.strftime("%Y-%m-%d")
         hora = dt.strftime("%H:%M:%S")
-
 
         mensajes.append({
             "chat": chat,
@@ -200,9 +172,8 @@ def buscar_mensajes(query):
 
     return mensajes
 
-
 # -----------------------------
-# API INTELIGENTE CON OPENAI
+# API INTELIGENTE
 # -----------------------------
 @app.get("/buscar_ai")
 def buscar_ai(q: str):
@@ -247,32 +218,28 @@ Mensajes encontrados:
         "mensajes": mensajes
     }
 
-
 # -----------------------------
-# DEBUG TABLAS
+# DEBUG (POSTGRES VERSION)
 # -----------------------------
 @app.get("/debug")
 def debug():
-    #conn = sqlite3.connect("data/wacli.db")
-    #cur = conn.cursor()
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
+    cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
     tablas = cur.fetchall()
+    conn.close()
     return {"tablas": tablas}
 
-
-# -----------------------------
-# DEBUG COLUMNAS
-# -----------------------------
 @app.get("/debug2")
 def debug2():
-    #conn = sqlite3.connect("data/wacli.db")
-    #cur = conn.cursor()
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("PRAGMA table_info(messages);")
+    cur.execute("""
+        SELECT column_name, data_type
+        FROM information_schema.columns
+        WHERE table_name='messages'
+    """)
     columnas = cur.fetchall()
+    conn.close()
     return {"columnas": columnas}
-
 
