@@ -177,46 +177,20 @@ def buscar_mensajes(query):
 # -----------------------------
 @app.get("/buscar_ai")
 def buscar_ai(q: str):
-    mensajes = buscar_mensajes(q)
+    mensajes = buscar_semantico(q, k=5)   # ahora es semántico
 
-    if len(mensajes) == 0:
-        return {
-            "resumen": "No encontré mensajes relacionados con tu búsqueda.",
-            "mensajes": []
-        }
+    texto_para_resumen = "\n".join([
+        f"[{m['chat']} - {m['de']} - {m['fecha']} {m['hora']}] {m['texto']}"
+        for m in mensajes
+    ])
 
-    texto_para_ai = ""
-    for m in mensajes:
-        texto_para_ai += (
-            f"Chat: {m['chat']}\n"
-            f"De: {m['de']}\n"
-            f"Fecha: {m['fecha']} {m['hora']}\n"
-            f"Mensaje: {m['texto']}\n\n"
-        )
-
-    prompt = f"""
-Eres un analista experto en conversaciones de WhatsApp.
-Resume los mensajes encontrados de forma clara, útil y concisa.
-No inventes nada. Usa solo la información dada.
-
-Mensajes encontrados:
-{texto_para_ai}
-"""
-
-    respuesta = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "Eres un analista de conversaciones de WhatsApp."},
-            {"role": "user", "content": prompt}
-        ]
-    )
-
-    resumen = respuesta.choices[0].message.content
+    resumen = generar_resumen(texto_para_resumen)
 
     return {
         "resumen": resumen,
         "mensajes": mensajes
     }
+
 
 # -----------------------------
 # DEBUG (POSTGRES VERSION)
