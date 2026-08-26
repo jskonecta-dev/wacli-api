@@ -95,14 +95,21 @@ def generar_embeddings_api():
 # BÚSQUEDA SEMÁNTICA
 # -----------------------------
 @app.get("/buscar_semantico")
+@app.get("/buscar_semantico")
 def buscar_semantico(q: str, k: int = 5):
     try:
+        # Crear embedding de la consulta
         query_emb = client.embeddings.create(
             model="text-embedding-3-small",
             input=q
         ).data[0].embedding
 
         query_vec = np.array(query_emb, dtype=np.float32)
+
+        # Normalizar el vector de la consulta
+        norm = np.linalg.norm(query_vec)
+        if norm > 0:
+            query_vec = query_vec / norm
 
         conn = get_conn()
         cur = conn.cursor()
@@ -115,7 +122,8 @@ def buscar_semantico(q: str, k: int = 5):
         for message_id, text, chat, sender, ts, emb_blob in rows:
             emb_vec = np.frombuffer(emb_blob, dtype=np.float32)
 
-            sim = np.dot(query_vec, emb_vec) / (np.linalg.norm(query_vec) * np.linalg.norm(emb_vec))
+            # Producto punto directo (coseno) porque emb_vec ya está normalizado
+            sim = np.dot(query_vec, emb_vec)
 
             resultados.append({
                 "message_id": message_id,
@@ -128,6 +136,7 @@ def buscar_semantico(q: str, k: int = 5):
 
         conn.close()
 
+        # Ordenar por similaridad descendente
         resultados.sort(key=lambda x: x["similaridad"], reverse=True)
 
         return {
@@ -137,6 +146,7 @@ def buscar_semantico(q: str, k: int = 5):
 
     except Exception as e:
         return {"error": str(e)}
+
 
 # -----------------------------
 # BÚSQUEDA AVANZADA
