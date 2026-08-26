@@ -18,7 +18,7 @@ def get_conn():
     )
 
 # -----------------------------
-# GENERAR EMBEDDINGS
+# GENERAR EMBEDDINGS NORMALIZADOS
 # -----------------------------
 def generar_embeddings():
     conn = get_conn()
@@ -36,8 +36,16 @@ def generar_embeddings():
             input=text
         ).data[0].embedding
 
-        # Convertir a BYTEA para PostgreSQL
-        emb_bytes = psycopg2.Binary(np.array(emb, dtype=np.float32).tobytes())
+        # Convertir a numpy
+        emb_vec = np.array(emb, dtype=np.float32)
+
+        # Normalizar a longitud 1
+        norm = np.linalg.norm(emb_vec)
+        if norm > 0:
+            emb_vec = emb_vec / norm
+
+        # Guardar como BYTEA
+        emb_bytes = psycopg2.Binary(emb_vec.tobytes())
 
         # Insertar en Neon
         cur.execute("""
