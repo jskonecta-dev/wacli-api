@@ -44,10 +44,15 @@ def buscar_en_wacli(query):
 
     # separar palabras por espacios
     palabras = query.split()
-
+    if not palabras:
+    return {"error": "No se recibieron palabras para buscar"}
     # construir condiciones dinámicas con AND
+   
     condiciones = " AND ".join(["text ILIKE %s" for _ in palabras])
     valores = [f"%{p}%" for p in palabras]
+
+    print("Condiciones:", condiciones)
+    print("Valores:", valores)
 
     sql = f"""
         SELECT message_id, text, chat_name, sender_name, ts
