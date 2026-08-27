@@ -1,69 +1,40 @@
 import psycopg2
-import numpy as np
 from openai import OpenAI
-import os
+import numpy as np
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-# -----------------------------
-# CONEXIÓN A NEON
-# -----------------------------
-def get_conn():
-    return psycopg2.connect(
-        host=os.getenv("PGHOST"),
-        database=os.getenv("PGDATABASE"),
-        user=os.getenv("PGUSER"),
-        password=os.getenv("PGPASSWORD"),
-        port=os.getenv("PGPORT")
-    )
-
-# -----------------------------
-# GENERAR EMBEDDINGS NORMALIZADOS
-# -----------------------------
-def generar_embeddings():
-    conn = get_conn()
+def run_embeddings(limit=100):
+    conn = psycopg2.connect(...)
     cur = conn.cursor()
-
-    # Leer mensajes desde la tabla messages
-    # cur.execute("SELECT message_id, text, chat_name, sender_name, ts FROM messages")
     cur.execute("""
         SELECT message_id, text, chat_name, sender_name, ts
         FROM messages
         ORDER BY message_id
-        LIMIT 100
-    """)
+        LIMIT %s
+    """, (limit,))
     rows = cur.fetchall()
 
-    for message_id, text, chat, sender, ts in rows:
+    client = OpenAI(api_key="TU_API_KEY")
 
-        # Crear embedding
-        emb = client.embeddings.create(
+    for message_id, text, chat, sender, ts in rows:
+        if not text:
+            continue
+        response = client.embeddings.create(
             model="text-embedding-3-small",
             input=text
-        ).data[0].embedding
-
-        # Convertir a numpy
-        emb_vec = np.array(emb, dtype=np.float32)
-
-        # Normalizar a longitud 1
-        norm = np.linalg.norm(emb_vec)
+        )
+        embedding = response.data[0].embedding
+        norm = np.linalg.norm(embedding)
         if norm > 0:
-            emb_vec = emb_vec / norm
+            embedding = (np.array(embedding) / norm).tolist()
 
-        # Guardar como BYTEA
-        emb_bytes = psycopg2.Binary(emb_vec.tobytes())
-
-        # Insertar en Neon
         cur.execute("""
-            INSERT INTO message_embeddings (message_id, text, chat_name, sender_name, ts, embedding)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ON CONFLICT (message_id) DO UPDATE SET
-                text = EXCLUDED.text,
-                chat_name = EXCLUDED.chat_name,
-                sender_name = EXCLUDED.sender_name,
-                ts = EXCLUDED.ts,
-                embedding = EXCLUDED.embedding
-        """, (message_id, text, chat, sender, ts, emb_bytes))
+            INSERT INTO message_embeddings (message_id, embedding)
+            VALUES (%s, %s)
+            ON CONFLICT (message_id) DO UPDATE SET embedding = EXCLUDED.embedding
+        """, (message_id, embedding))
 
     conn.commit()
     conn.close()
+
+     
+     
