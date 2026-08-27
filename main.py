@@ -105,6 +105,7 @@ def buscar(q: str):
 def generar_embeddings_api():
     try:
         import generar_embeddings
+        generar_embeddings.run_embeddings(limit=100)
         return {"status": "embeddings generados"}
     except Exception as e:
         return {"error": str(e)}
