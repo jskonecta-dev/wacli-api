@@ -8,8 +8,9 @@ def run_embeddings(limit=100):
     conn = psycopg2.connect(
         host="ep-steep-voice-aykl8we5.c-5.us-east-2.aws.neon.tech",
         dbname="neondb",
-        user="TU_USUARIO_DE_NEON",
-        password="TU_PASSWORD_DE_NEON",
+        user="neondb_owner",
+        password="npg_resHDRCy53BE",
+        port=5432,
         sslmode="require"
     )
     cur = conn.cursor()
