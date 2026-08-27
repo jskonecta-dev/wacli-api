@@ -38,5 +38,18 @@ def run_embeddings(limit=100):
 
         # Normalizar vector
         norm = np.linalg.norm(embedding)
-        if norm
-     
+        if norm > 0:
+            embedding = (np.array(embedding) / norm).astype(float).tolist()
+
+        # Insertar en la tabla como JSON
+        cur.execute("""
+            INSERT INTO message_embeddings (message_id, embedding)
+            VALUES (%s, %s)
+            ON CONFLICT (message_id) DO UPDATE SET embedding = EXCLUDED.embedding
+        """, (message_id, json.dumps(embedding)))
+
+        print(f"✅ Embedding generado para mensaje {message_id} ({chat}/{sender})")
+
+    conn.commit()
+    conn.close()
+
