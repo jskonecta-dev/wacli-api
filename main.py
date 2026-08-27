@@ -70,15 +70,33 @@ def crear_tabla():
     conn.close()
     return {"status": "tabla creada"}
 
-# -----------------------------
-# BÚSQUEDA SIMPLE API
-# -----------------------------
+
+
+
 @app.get("/buscar")
 def buscar(q: str):
     try:
-        return buscar_en_wacli(q)
+        conn = psycopg2.connect(...)
+        cur = conn.cursor()
+        cur.execute("SELECT message_id, text, chat_name, sender_name, ts FROM messages WHERE text ILIKE %s", ('%' + q + '%',))
+        rows = cur.fetchall()
+        conn.close()
+
+        resultados = []
+        for message_id, text, chat, sender, ts in rows:
+            resultados.append({
+                "message_id": message_id,
+                "text": text,
+                "chat": chat,
+                "sender": sender,
+                "ts": ts
+            })
+
+        return {"query": q, "resultados": resultados}
+
     except Exception as e:
         return {"error": str(e)}
+
 
 # -----------------------------
 # GENERAR EMBEDDINGS
