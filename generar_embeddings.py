@@ -25,7 +25,13 @@ def generar_embeddings():
     cur = conn.cursor()
 
     # Leer mensajes desde la tabla messages
-    cur.execute("SELECT message_id, text, chat_name, sender_name, ts FROM messages")
+    # cur.execute("SELECT message_id, text, chat_name, sender_name, ts FROM messages")
+    cur.execute("""
+        SELECT message_id, text, chat_name, sender_name, ts
+        FROM messages
+        ORDER BY message_id
+        LIMIT 100
+    """)
     rows = cur.fetchall()
 
     for message_id, text, chat, sender, ts in rows:
