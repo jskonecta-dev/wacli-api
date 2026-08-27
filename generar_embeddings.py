@@ -6,10 +6,10 @@ import json
 def run_embeddings(limit=100):
     # Conexión a Neon
     conn = psycopg2.connect(
-        host="TU_HOST",
-        dbname="TU_DB",
-        user="TU_USER",
-        password="TU_PASSWORD",
+        host="ep-steep-voice-aykl8we5.c-5.us-east-2.aws.neon.tech",
+        dbname="neondb",
+        user="TU_USUARIO_DE_NEON",
+        password="TU_PASSWORD_DE_NEON",
         sslmode="require"
     )
     cur = conn.cursor()
