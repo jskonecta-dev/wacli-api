@@ -94,17 +94,13 @@ def crear_tabla():
     conn.close()
     return {"status": "tabla creada"}
 
-
-
-
 @app.get("/buscar")
 def buscar(q: str):
     try:
-        conn = psycopg2.connect(...)
-        cur = conn.cursor()
-        cur.execute("SELECT message_id, text, chat_name, sender_name, ts FROM messages WHERE text ILIKE %s", ('%' + q + '%',))
-        rows = cur.fetchall()
-        conn.close()
+        resultados = buscar_en_wacli(q)
+        return {"query": q, "resultados": resultados}
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/buscar")
 def buscar(q: str):
