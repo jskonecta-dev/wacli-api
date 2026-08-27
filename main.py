@@ -108,11 +108,10 @@ def buscar(q: str):
 
 @app.get("/buscar")
 def buscar(q: str):
-    try:
-        resultados = buscar_en_wacli(q)
-        return {"query": q, "resultados": resultados}
-    except Exception as e:
-        return {"error": str(e)}
+    if not q.strip():
+        return {"error": "No se recibieron palabras para buscar"}
+    resultados = buscar_en_wacli(q)
+    return {"query": q, "resultados": resultados}
 
 
 # -----------------------------
