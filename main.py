@@ -17,7 +17,7 @@ def get_conn():
         database=os.getenv("PGDATABASE"),
         user=os.getenv("PGUSER"),
         password=os.getenv("PGPASSWORD"),
-        port=os.getenv("PGPORT")
+        port=os.getenv("PGPORT"),
         sslmode="require"
     )
 
