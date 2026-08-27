@@ -24,7 +24,7 @@ def run_embeddings(limit=100):
     """, (limit,))
     rows = cur.fetchall()
 
-    client = OpenAI(api_key="TU_API_KEY")
+    client = OpenAI(api_key="sk-proj-chS7kuBPROwF8xctZD6od690x2uAiNxAiNx47Eo3cERembWqkw1OqNkeOGkBYp6TfO64xq0ozI3OVFT3BlbkFJOKzzjMaHnipO3XTA0TDsCnfAosQMJ5xzUH5RqRygJo-QW12rPHazp5uxpVCL-uyMWMt5XTs-kA")
 
     for message_id, text, chat, sender, ts in rows:
         if not text:
