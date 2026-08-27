@@ -37,15 +37,34 @@ def convertir_timestamp(ts):
 # -----------------------------
 # BÚSQUEDA SIMPLE
 # -----------------------------
+
 def buscar_en_wacli(query):
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("SELECT text FROM messages WHERE text LIKE %s", ('%' + query + '%',))
-    resultados = cur.fetchall()
+    # separar palabras por espacios
+    palabras = query.split()
 
+    # construir condiciones dinámicas con AND
+    condiciones = " AND ".join(["text ILIKE %s" for _ in palabras])
+    valores = [f"%{p}%" for p in palabras]
+
+    sql = f"""
+        SELECT message_id, text, chat_name, sender_name, ts
+        FROM messages
+        WHERE {condiciones}
+        ORDER BY ts DESC
+        LIMIT 50
+    """
+
+    cur.execute(sql, valores)
+    resultados = cur.fetchall()
     conn.close()
-    return [r[0] for r in resultados]
+
+    return [
+        {"id": r[0], "text": r[1], "chat": r[2], "sender": r[3], "ts": r[4]}
+        for r in resultados
+    ]
 
 # -----------------------------
 # CREAR TABLA EMBEDDINGS
@@ -82,18 +101,11 @@ def buscar(q: str):
         rows = cur.fetchall()
         conn.close()
 
-        resultados = []
-        for message_id, text, chat, sender, ts in rows:
-            resultados.append({
-                "message_id": message_id,
-                "text": text,
-                "chat": chat,
-                "sender": sender,
-                "ts": ts
-            })
-
+@app.get("/buscar")
+def buscar(q: str):
+    try:
+        resultados = buscar_en_wacli(q)
         return {"query": q, "resultados": resultados}
-
     except Exception as e:
         return {"error": str(e)}
 
