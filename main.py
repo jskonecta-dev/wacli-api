@@ -7,7 +7,12 @@ import os
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 app = FastAPI()
+STOPWORDS = {"hay", "el", "la", "los", "las", "que", "de", "y", "a", "un", "una", "en", "con", "por", "para", "se", "del", "al"}
 
+def limpiar_consulta(q: str) -> str:
+    tokens = q.lower().split()
+    tokens_filtrados = [t for t in tokens if t not in STOPWORDS]
+    return " ".join(tokens_filtrados)
 # -----------------------------
 # CONEXIÓN A NEON POSTGRESQL
 # -----------------------------
@@ -94,21 +99,18 @@ def crear_tabla():
     conn.commit()
     conn.close()
     return {"status": "tabla creada"}
-
-@app.get("/buscar")
-def buscar(q: str):
-    try:
-        resultados = buscar_en_wacli(q)
-        return {"query": q, "resultados": resultados}
-    except Exception as e:
-        return {"error": str(e)}
-
 @app.get("/buscar")
 def buscar(q: str):
     if not q.strip():
         return {"error": "No se recibieron palabras para buscar"}
-    resultados = buscar_en_wacli(q)
-    return {"query": q, "resultados": resultados}
+
+    # Limpias la consulta antes de buscar
+    consulta_limpia = limpiar_consulta(q)
+
+    resultados = buscar_en_wacli(consulta_limpia)
+    return {"query_original": q, "query_limpia": consulta_limpia, "resultados": resultados}
+
+
 
 
 # -----------------------------
