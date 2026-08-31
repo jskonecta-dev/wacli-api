@@ -7,7 +7,7 @@ import os
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 app = FastAPI()
-STOPWORDS = {"hay", "el", "la", "los", "las", "que", "de", "y", "a", "un", "una", "en", "con", "por", "para", "se", "del", "al"}
+STOPWORDS = {"hay", "el", "la", "los", "las", "que", "de", "y", "a", "un", "una", "en", "con", "por", "para", "se", "del", "al", "cuando", "si" }
 
 def limpiar_consulta(q: str) -> str:
     tokens = q.lower().split()
