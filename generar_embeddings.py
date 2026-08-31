@@ -2,6 +2,7 @@ import psycopg2
 from openai import OpenAI
 import numpy as np
 import json
+import os
 
 def run_embeddings(limit=100):
     # Conexión a Neon
@@ -24,7 +25,7 @@ def run_embeddings(limit=100):
     """, (limit,))
     rows = cur.fetchall()
 
-    client = OpenAI(api_key="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")
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
     for message_id, text, chat, sender, ts in rows:
         if not text:
