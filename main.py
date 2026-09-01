@@ -348,7 +348,6 @@ def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None
         FROM messages
         WHERE 1=1
     """
-
     params = []
 
     if chat:
@@ -373,12 +372,15 @@ def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None
         query += " AND text ILIKE %s"
         params.append(f"%{q}%")
 
-    conn = get_conn()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute(query, params)
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
+    try:
+        conn = get_conn()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(query, params)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)})
 
     resultados = []
     for row in rows:
@@ -389,5 +391,6 @@ def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None
         resultados.append(row)
 
     return JSONResponse(content=resultados)
+
 
 
