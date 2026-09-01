@@ -339,7 +339,14 @@ def debug2():
 # Buscar avanzado
 @app.get("/buscar_avanzado")
 def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None, q: str = None):
-    query = "SELECT * FROM messages WHERE 1=1"
+    # query = "SELECT * FROM messages WHERE 1=1"
+    query = """
+        SELECT message_id, chat_name, sender_name, ts, text,
+               media_type, media_path, mime_type, media_caption, filename, local_path
+        FROM messages
+        WHERE 1=1
+    """
+
     params = []
 
     # Filtro por chat
