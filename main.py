@@ -344,12 +344,7 @@ def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None
                chat_name,
                sender_name,
                ts,
-               text,
-               media_type,
-               media_caption,
-               filename,
-               mime_type,
-               local_path
+               text
         FROM messages
         WHERE 1=1
     """
