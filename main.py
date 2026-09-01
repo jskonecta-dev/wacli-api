@@ -339,10 +339,17 @@ def debug2():
 # Buscar avanzado
 @app.get("/buscar_avanzado")
 def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None, q: str = None):
-    # query = "SELECT * FROM messages WHERE 1=1"
     query = """
-        SELECT message_id, chat_name, sender_name, ts, text,
-               media_type, media_path, mime_type, media_caption, filename, local_path
+        SELECT rowid AS message_id,
+               chat_name,
+               sender_name,
+               ts,
+               text,
+               media_type,
+               media_caption,
+               filename,
+               mime_type,
+               local_path
         FROM messages
         WHERE 1=1
     """
@@ -360,17 +367,14 @@ def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None
         to_ts = int(datetime.strptime(to_date, "%Y-%m-%d").timestamp())
         query += " AND ts BETWEEN %s AND %s"
         params.extend([from_ts, to_ts])
-    
-    elif from_date and not to_date:
+    elif from_date:
         from_ts = int(datetime.strptime(from_date, "%Y-%m-%d").timestamp())
         query += " AND ts >= %s"
         params.append(from_ts)
-    
-    elif to_date and not from_date:
+    elif to_date:
         to_ts = int(datetime.strptime(to_date, "%Y-%m-%d").timestamp())
         query += " AND ts <= %s"
         params.append(to_ts)
-    
 
     # Filtro por texto
     if q:
@@ -384,7 +388,6 @@ def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None
     cur.close()
     conn.close()
 
-    # Convertir ts a fecha/hora legibles
     resultados = []
     for row in rows:
         ts_val = row.get("ts")
@@ -394,3 +397,4 @@ def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None
         resultados.append(row)
 
     return JSONResponse(content=resultados)
+
