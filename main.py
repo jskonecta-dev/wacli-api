@@ -1,5 +1,7 @@
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 import psycopg2
+from psycopg2.extras import RealDictCursor
 from datetime import datetime
 from openai import OpenAI
 import numpy as np
@@ -26,19 +28,76 @@ def get_conn():
         sslmode="require"
     )
 
+def normalize(vec):
+    norm = np.linalg.norm(vec)
+    if norm > 0:
+        return vec / norm
+    return vec
+
+def run_embeddings(limit=100):
+    # obtienes mensajes desde la tabla messages
+    # generas embeddings con OpenAI
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT message_id, text, chat_name, sender_name, ts
+        FROM messages
+        ORDER BY ts DESC
+        LIMIT %s
+    """, (limit,))
+    rows = cur.fetchall()
+    for message_id, text, chat, sender, ts in rows:
+        emb = client.embeddings.create(
+            model="text-embedding-3-small",
+            input=text
+        ).data[0].embedding
+
+        emb_vec = np.array(emb, dtype=np.float32)
+        emb_vec = normalize(emb_vec)
+
+        cur.execute("""
+            INSERT INTO message_embeddings (message_id, text, chat_name, sender_name, ts, embedding)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (message_id) DO UPDATE SET embedding = EXCLUDED.embedding
+        """, (message_id, text, chat, sender, ts, emb_vec.tobytes()))
+    conn.commit()
+    cur.close()
+    conn.close()
 # -----------------------------
 # CONVERTIR TIMESTAMP
 # -----------------------------
 def convertir_timestamp(ts):
-    ts = int(ts)
+    try:
+        ts = int(ts)
+    except Exception:
+        return None  # valor inválido
 
-    if ts < 2000000000:
-        return datetime.fromtimestamp(ts)
+    if ts < 2000000000:  # segundos
+        return datetime.utcfromtimestamp(ts)
 
-    if ts > 2000000000000:
-        return datetime.fromtimestamp(ts / 1_000_000)
+    if ts > 2000000000000:  # microsegundos
+        return datetime.utcfromtimestamp(ts / 1_000_000)
 
-    return datetime.fromtimestamp(ts / 1000)
+    # milisegundos
+    return datetime.utcfromtimestamp(ts / 1000)
+
+
+def formatear_timestamp(ts):
+    """
+    Convierte un timestamp a diccionario con fecha y hora legibles.
+    Devuelve None si el valor es inválido.
+    """
+    dt = convertir_timestamp(ts)
+    if dt is None:
+        return None
+
+    return {
+        "fecha": dt.strftime("%Y-%m-%d"),
+        "hora": dt.strftime("%H:%M:%S")
+    }
+
+
 
 # -----------------------------
 # BÚSQUEDA SIMPLE
@@ -57,8 +116,8 @@ def buscar_en_wacli(query):
     condiciones = " AND ".join(["text ILIKE %s" for _ in palabras])
     valores = [f"%{p}%" for p in palabras]
 
-    print("Condiciones:", condiciones)
-    print("Valores:", valores)
+    # print("Condiciones:", condiciones)
+    # print("Valores:", valores)
 
     sql = f"""
         SELECT message_id, text, chat_name, sender_name, ts
@@ -128,7 +187,6 @@ def generar_embeddings_api():
 # -----------------------------
 # BÚSQUEDA SEMÁNTICA
 # -----------------------------
-@app.get("/buscar_semantico")
 @app.get("/buscar_semantico")
 def buscar_semantico(q: str, k: int = 5):
     try:
@@ -216,6 +274,22 @@ def buscar_mensajes(query):
 
     return mensajes
 
+# funcion generar resumen
+def generar_resumen(texto: str) -> str:
+    try:
+        respuesta = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Eres un asistente que resume conversaciones en español de forma breve y clara."},
+                {"role": "user", "content": f"Resume este texto en máximo 5 líneas:\n\n{texto}"}
+            ],
+            max_tokens=200
+        )
+        return respuesta.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Error al generar resumen: {str(e)}"
+
+
 # -----------------------------
 # API INTELIGENTE
 # -----------------------------
@@ -261,3 +335,55 @@ def debug2():
     conn.close()
     return {"columnas": columnas}
 
+
+# Buscar avanzado
+@app.get("/buscar_avanzado")
+def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None, q: str = None):
+    query = "SELECT * FROM messages WHERE 1=1"
+    params = []
+
+    # Filtro por chat
+    if chat:
+        query += " AND chat_name = %s"
+        params.append(chat)
+
+    # Filtro por fecha desde
+    if from_date:
+        try:
+            ts_from = int(datetime.fromisoformat(from_date).timestamp() * 1000)  # milisegundos
+            query += " AND ts >= %s"
+            params.append(ts_from)
+        except Exception:
+            return {"error": f"Formato inválido en from_date: {from_date}. Usa YYYY-MM-DD"}
+
+    # Filtro por fecha hasta
+    if to_date:
+        try:
+            ts_to = int(datetime.fromisoformat(to_date).timestamp() * 1000)  # milisegundos
+            query += " AND ts <= %s"
+            params.append(ts_to)
+        except Exception:
+            return {"error": f"Formato inválido en to_date: {to_date}. Usa YYYY-MM-DD"}
+
+    # Filtro por texto
+    if q:
+        query += " AND text ILIKE %s"
+        params.append(f"%{q}%")
+
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(query, params)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    # Convertir ts a fecha/hora legibles
+    resultados = []
+    for row in rows:
+        ts_val = row.get("ts")
+        fecha_hora = formatear_timestamp(ts_val)
+        row["fecha"] = fecha_hora["fecha"] if fecha_hora else None
+        row["hora"] = fecha_hora["hora"] if fecha_hora else None
+        resultados.append(row)
+
+    return JSONResponse(content=resultados)
