@@ -356,12 +356,10 @@ def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None
 
     params = []
 
-    # Filtro por chat
     if chat:
         query += " AND chat_name ILIKE %s"
         params.append(f"%{chat}%")
 
-    # Filtro por rango de fechas usando ts
     if from_date and to_date:
         from_ts = int(datetime.strptime(from_date, "%Y-%m-%d").timestamp())
         to_ts = int(datetime.strptime(to_date, "%Y-%m-%d").timestamp())
@@ -376,7 +374,6 @@ def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None
         query += " AND ts <= %s"
         params.append(to_ts)
 
-    # Filtro por texto
     if q:
         query += " AND text ILIKE %s"
         params.append(f"%{q}%")
@@ -397,4 +394,5 @@ def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None
         resultados.append(row)
 
     return JSONResponse(content=resultados)
+
 
