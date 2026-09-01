@@ -357,7 +357,7 @@ def debug_columns():
 @app.get("/buscar_avanzado")
 def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None, q: str = None):
     query = """
-        SELECT msg_id AS message_id,
+        SELECT message_id,
                chat_name,
                sender_name,
                ts,
