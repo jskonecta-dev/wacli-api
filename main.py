@@ -340,7 +340,7 @@ def debug2():
 @app.get("/buscar_avanzado")
 def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None, q: str = None):
     query = """
-        SELECT rowid AS message_id,
+        SELECT msg_id AS message_id,
                chat_name,
                sender_name,
                ts,
