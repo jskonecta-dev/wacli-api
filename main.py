@@ -335,6 +335,23 @@ def debug2():
     conn.close()
     return {"columnas": columnas}
 
+@app.get("/debug_columns")
+def debug_columns():
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT column_name, data_type
+            FROM information_schema.columns
+            WHERE table_name = 'messages';
+        """)
+        cols = cur.fetchall()
+        cur.close()
+        conn.close()
+        return JSONResponse(content={"columns": cols})
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)})
+
 
 # Buscar avanzado
 @app.get("/buscar_avanzado")
