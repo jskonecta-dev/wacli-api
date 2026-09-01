@@ -344,8 +344,8 @@ def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None
 
     # Filtro por chat
     if chat:
-        query += " AND chat_name = %s"
-        params.append(chat)
+        query += " AND chat_name ILIKE %s"
+        params.append(f"%{chat}%")
 
     # Filtro por fecha desde
     if from_date:
