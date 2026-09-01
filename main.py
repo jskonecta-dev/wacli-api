@@ -348,22 +348,11 @@ def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None
         params.append(f"%{chat}%")
 
     # Filtro por fecha desde
-    if from_date:
-        try:
-            ts_from = int(datetime.fromisoformat(from_date).timestamp() * 1000)  # milisegundos
-            query += " AND ts >= %s"
-            params.append(ts_from)
-        except Exception:
-            return {"error": f"Formato inválido en from_date: {from_date}. Usa YYYY-MM-DD"}
-
-    # Filtro por fecha hasta
-    if to_date:
-        try:
-            ts_to = int(datetime.fromisoformat(to_date).timestamp() * 1000)  # milisegundos
-            query += " AND ts <= %s"
-            params.append(ts_to)
-        except Exception:
-            return {"error": f"Formato inválido en to_date: {to_date}. Usa YYYY-MM-DD"}
+    if from_date and to_date:
+        from_ts = int(datetime.strptime(from_date, "%Y-%m-%d").timestamp())
+        to_ts = int(datetime.strptime(to_date, "%Y-%m-%d").timestamp())
+        query += " AND ts BETWEEN %s AND %s"
+        params.extend([from_ts, to_ts])
 
     # Filtro por texto
     if q:
