@@ -347,12 +347,23 @@ def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None
         query += " AND chat_name ILIKE %s"
         params.append(f"%{chat}%")
 
-    # Filtro por fecha desde
+    # Filtro por rango de fechas usando ts
     if from_date and to_date:
         from_ts = int(datetime.strptime(from_date, "%Y-%m-%d").timestamp())
         to_ts = int(datetime.strptime(to_date, "%Y-%m-%d").timestamp())
         query += " AND ts BETWEEN %s AND %s"
         params.extend([from_ts, to_ts])
+    
+    elif from_date and not to_date:
+        from_ts = int(datetime.strptime(from_date, "%Y-%m-%d").timestamp())
+        query += " AND ts >= %s"
+        params.append(from_ts)
+    
+    elif to_date and not from_date:
+        to_ts = int(datetime.strptime(to_date, "%Y-%m-%d").timestamp())
+        query += " AND ts <= %s"
+        params.append(to_ts)
+    
 
     # Filtro por texto
     if q:
