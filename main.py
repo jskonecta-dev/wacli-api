@@ -412,6 +412,7 @@ def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None
 
 @app.get("/seleccionar_chat")
 def seleccionar_chat():
+    print("Estoy en seleccionar chat")
     try:
         conn = get_conn()
         cur = conn.cursor()
