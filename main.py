@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from db import get_db_connection
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
@@ -413,7 +413,7 @@ def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None
 @app.get("/seleccionar_chat")
 def seleccionar_chat():
     try:
-        conn = get_db_connection()
+        conn = get_conn()
         cur = conn.cursor()
 
         cur.execute("SELECT DISTINCT chat_name FROM mensajes ORDER BY chat_name ASC;")
@@ -428,7 +428,3 @@ def seleccionar_chat():
 
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
-
-
-
-
