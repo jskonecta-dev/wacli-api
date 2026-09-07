@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from db import get_db_connection
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
