@@ -409,5 +409,25 @@ def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None
 
     return JSONResponse(content=resultados)
 
+@app.get("/seleccionar_chat")
+def seleccionar_chat():
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        cur.execute("SELECT DISTINCT chat_name FROM mensajes ORDER BY chat_name ASC;")
+        rows = cur.fetchall()
+
+        chats = [row[0] for row in rows]
+
+        cur.close()
+        conn.close()
+
+        return JSONResponse(content=chats)
+
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
 
 
