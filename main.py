@@ -152,13 +152,22 @@ async def seleccionar_chat():
         conn = get_conn()
         cur = conn.cursor()
 
-        cur.execute("SELECT DISTINCT chat_name FROM mensajes ORDER BY chat_name ASC;")
+        # Tabla correcta: messages
+        cur.execute("SELECT DISTINCT chat_name FROM messages ORDER BY chat_name ASC;")
         rows = cur.fetchall()
 
         chats = [row[0] for row in rows]
 
         cur.close()
         conn.close()
+
+        response = JSONResponse(content=chats)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
 
         # Respuesta JSON sin caché (aunque el middleware ya lo hace)
         response = JSONResponse(content=chats)
