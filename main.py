@@ -136,6 +136,29 @@ def buscar_en_wacli(query):
         {"id": r[0], "text": r[1], "chat": r[2], "sender": r[3], "ts": r[4]}
         for r in resultados
     ]
+# ----------------------------- llenar combo box de chats
+# 
+# -----------------------------
+
+@app.get("/seleccionar_chat")
+def seleccionar_chat():
+    print("Estoy en seleccionar chat")
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+
+        cur.execute("SELECT DISTINCT chat_name FROM mensajes ORDER BY chat_name ASC;")
+        rows = cur.fetchall()
+
+        chats = [row[0] for row in rows]
+
+        cur.close()
+        conn.close()
+
+        return JSONResponse(content=chats)
+
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 # -----------------------------
 # CREAR TABLA EMBEDDINGS
@@ -410,22 +433,3 @@ def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None
 
     return JSONResponse(content=resultados)
 
-@app.get("/seleccionar_chat")
-def seleccionar_chat():
-    print("Estoy en seleccionar chat")
-    try:
-        conn = get_conn()
-        cur = conn.cursor()
-
-        cur.execute("SELECT DISTINCT chat_name FROM mensajes ORDER BY chat_name ASC;")
-        rows = cur.fetchall()
-
-        chats = [row[0] for row in rows]
-
-        cur.close()
-        conn.close()
-
-        return JSONResponse(content=chats)
-
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
