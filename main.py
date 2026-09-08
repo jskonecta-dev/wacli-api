@@ -396,7 +396,7 @@ def debug_columns():
 
 # Buscar avanzado
 @app.get("/buscar_avanzado")
-def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None, q: str = None):
+def buscar_avanzado(chat_name: str = None, from_date: str = None, to_date: str = None, q: str = None):
     query = """
         SELECT message_id,
                chat_name,
@@ -408,9 +408,9 @@ def buscar_avanzado(chat: str = None, from_date: str = None, to_date: str = None
     """
     params = []
 
-    if chat:
+    if chat_name:
         query += " AND chat_name ILIKE %s"
-        params.append(f"%{chat}%")
+        params.append(f"%{chat_name}%")
 
     if from_date and to_date:
         from_ts = int(datetime.strptime(from_date, "%Y-%m-%d").timestamp())
