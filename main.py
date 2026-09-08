@@ -136,38 +136,15 @@ def buscar_en_wacli(query):
         {"id": r[0], "text": r[1], "chat": r[2], "sender": r[3], "ts": r[4]}
         for r in resultados
     ]
-# ----------------------------- llenar combo box de chats
-# 
-# -----------------------------
 
-@app.get("/seleccionar_chat")
-def seleccionar_chat():
-   
-    try:
-        print("Estoy en seleccionar chat")
-        conn = get_conn()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute(query, params)
-        # rows = cur.fetchall()
-        # cur.close()
-        # conn.close()
-        
-        
-        # conn = get_conn()
-        # cur = conn.cursor()
 
-        cur.execute("SELECT DISTINCT chat_name FROM mensajes ORDER BY chat_name ASC;")
-        rows = cur.fetchall()
 
-        chats = [row[0] for row in rows]
+@app.get("/hola")
+def hola():
+    print("Estoy en /hola")
+    return JSONResponse(content={"mensaje": "hola mundo"})
 
-        cur.close()
-        conn.close()
 
-        return JSONResponse(content=chats)
-
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 # -----------------------------
 # CREAR TABLA EMBEDDINGS
