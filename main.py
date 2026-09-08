@@ -142,10 +142,19 @@ def buscar_en_wacli(query):
 
 @app.get("/seleccionar_chat")
 def seleccionar_chat():
-    print("Estoy en seleccionar chat")
+   
     try:
+        print("Estoy en seleccionar chat")
         conn = get_conn()
-        cur = conn.cursor()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(query, params)
+        # rows = cur.fetchall()
+        # cur.close()
+        # conn.close()
+        
+        
+        # conn = get_conn()
+        # cur = conn.cursor()
 
         cur.execute("SELECT DISTINCT chat_name FROM mensajes ORDER BY chat_name ASC;")
         rows = cur.fetchall()
