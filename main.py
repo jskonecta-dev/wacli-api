@@ -1,6 +1,5 @@
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
-
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, Response
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
@@ -10,6 +9,15 @@ import os
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 app = FastAPI()
+
+@app.middleware("http")
+async def no_cache_middleware(request: Request, call_next):
+    response: Response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
 STOPWORDS = {"hay", "el", "la", "los", "las", "que", "de", "y", "a", "un", "una", "en", "con", "por", "para", "se", "del", "al", "cuando", "si" }
 
 def limpiar_consulta(q: str) -> str:
@@ -137,14 +145,28 @@ def buscar_en_wacli(query):
         for r in resultados
     ]
 
+@app.get("/seleccionar_chat")
+async def seleccionar_chat():
+    print("Estoy en seleccionar_chat")
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
 
+        cur.execute("SELECT DISTINCT chat_name FROM mensajes ORDER BY chat_name ASC;")
+        rows = cur.fetchall()
 
-@app.get("/hola")
-def hola():
-    print("Estoy en /hola")
-    return JSONResponse(content={"mensaje": "hola mundo"})
+        chats = [row[0] for row in rows]
 
+        cur.close()
+        conn.close()
 
+        # Respuesta JSON sin caché (aunque el middleware ya lo hace)
+        response = JSONResponse(content=chats)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 # -----------------------------
 # CREAR TABLA EMBEDDINGS
