@@ -45,6 +45,22 @@ def normalize(vec):
         return vec / norm
     return vec
 
+# fuzzy matching
+def fuzzy_match(word, text, max_distance=2):
+    """
+    Retorna True si 'word' aparece en 'text' con una distancia de edición <= max_distance.
+    """
+    import difflib
+
+    text_words = text.split()
+
+    for w in text_words:
+        ratio = difflib.SequenceMatcher(None, word, w).ratio()
+        if ratio >= 0.75:  # 75% parecido
+            return True
+
+    return False
+    
 def run_embeddings(limit=100):
     # obtienes mensajes desde la tabla messages
     # generas embeddings con OpenAI
@@ -497,6 +513,7 @@ def buscar_hibrido(
     except Exception as e:
         return {"error": str(e)}
 
+
 # Buscar avanzado
 @app.get("/buscar_avanzado")
 def buscar_avanzado(
@@ -576,35 +593,58 @@ def buscar_avanzado(
         resultados = []
 
         for r in rows:
-    distancia = float(r[11])
-    similitud = 1 - distancia
+            distancia = float(r[11])
+            similitud = 1 - distancia
+        
+            # Convertir timestamp a fecha y hora legibles
+            fecha_hora = formatear_timestamp(r[4])
+            fecha = fecha_hora["fecha"] if fecha_hora else None
+            hora = fecha_hora["hora"] if fecha_hora else None
+        
+            texto = (r[1] or "").lower()
+        
+            # Fuzzy matching semántico
+            for u in ubicaciones_keywords:
+                if fuzzy_match(u, texto):
+                    boost += 0.15
+            
+            for t in tipos_keywords:
+                if fuzzy_match(t, texto):
+                    boost += 0.10
+            
+            for p in precio_keywords:
+                if fuzzy_match(p, texto):
+                    boost += 0.05
+            
+            for m in metraje_keywords:
+                if fuzzy_match(m, texto):
+                    boost += 0.05
+            
+            for op in operacion_keywords:
+                if fuzzy_match(op, texto):
+                    boost += 0.05
 
-    # Convertir timestamp a fecha y hora legibles
-    fecha_hora = formatear_timestamp(r[4])
-    fecha = fecha_hora["fecha"] if fecha_hora else None
-    hora = fecha_hora["hora"] if fecha_hora else None
-
-    texto = (r[1] or "").lower()
-
-    # BOOSTING
-    boost = 0
-
-    # Coincidencia exacta de ubicación (columna)
-    if ubicacion and r[7] and ubicacion.lower() == r[7].lower():
-        boost += 0.30
-
-    # Coincidencia exacta de tipo (columna)
-    if tipo and r[8] and tipo.lower() == r[8].lower():
-        boost += 0.25
-
-    # Coincidencia exacta de precio dentro del rango (columna)
-    if precio_min is not None and precio_max is not None and r[5]:
-        if precio_min <= r[5] <= precio_max:
-            boost += 0.20
-
-    # Coincidencia exacta de metraje (columna)
-    if metraje_min is not None and r[9] and r[9] >= metraje_min:
-        boost += 0.15
+            
+            
+            # BOOSTING
+            boost = 0
+        
+            # Coincidencia exacta de ubicación (columna)
+            if ubicacion and r[7] and ubicacion.lower() == r[7].lower():
+                boost += 0.30
+        
+            # Coincidencia exacta de tipo (columna)
+            if tipo and r[8] and tipo.lower() == r[8].lower():
+                boost += 0.25
+        
+            # Coincidencia exacta de precio dentro del rango (columna)
+            if precio_min is not None and precio_max is not None and r[5]:
+                if precio_min <= r[5] <= precio_max:
+                    boost += 0.20
+        
+            # Coincidencia exacta de metraje (columna)
+            if metraje_min is not None and r[9] and r[9] >= metraje_min:
+                boost += 0.15
 
     # -----------------------------
     # BOOSTING SEMÁNTICO (texto)
@@ -612,37 +652,107 @@ def buscar_avanzado(
 
     # Ubicaciones comunes
     ubicaciones_keywords = [
-        "altamira", "la lagunita", "santa rosa de lima",
-        "las mercedes", "el hatillo", "la castellana"
+        # Caracas — Este
+        "altamira", "la castellana", "los palos grandes", "campo alegre",
+        "la floresta", "bello campo", "las mercedes", "chuao",
+        "el cafetal", "san luis", "los naranjos", "prados del este",
+        "colinas de bello monte", "colinas de la california",
+        "la california", "macaracuay", "el hatillo", "la lagunita",
+        "los guayabitos", "oripoto", "loma larga",
+    
+        # Caracas — Centro
+        "la candelaria", "san bernardino", "el paraíso", "montalbán",
+        "los chaguaramos", "santa mónica", "los rosales",
+    
+        # Caracas — Oeste
+        "la yaguara", "caricuao", "antímano", "la vega", "el junquito",
+    
+        # La Guaira
+        "macuto", "tanaguarena", "caraballeda", "la guaira",
+    
+        # Miranda / Altos Mirandinos
+        "los teques", "san antonio", "san diego", "parque el retiro",
+    
+        # Valencia
+        "prebo", "la trigaleña", "el viñedo", "los mangos", "guaparo",
+    
+        # Maracay
+        "calicanto", "la soledad", "el bosque",
+    
+        # Maracaibo
+        "la lago", "tierra negra", "san francisco",
+    
+        # Lechería / Puerto La Cruz
+        "lecheria", "puerto la cruz", "nuevo horizonte", "las palmas",
+    
+        # Barquisimeto
+        "el cercado", "trinitarias", "del este",
+    
+        # Margarita
+        "porlamar", "pampatar", "playa el agua", "costa azul"
     ]
     for u in ubicaciones_keywords:
         if u in texto:
             boost += 0.20
 
     # Tipos de inmueble
-    tipos_keywords = ["apartamento", "casa", "oficina", "local", "galpón"]
+    tipos_keywords = [
+        "apartamento", "apto", "penthouse", "ph",
+        "casa", "townhouse", "quinta",
+        "oficina", "local", "galpón", "galpon",
+        "anexo", "estudio", "loft",
+        "terreno", "parcelamiento", "finca"
+    ]
+
     for t in tipos_keywords:
         if t in texto:
             boost += 0.15
 
     # Precio
-    precio_keywords = ["usd", "dolares", "dólares", "$", "k"]
+    precio_keywords = [
+        "usd", "dolares", "dólares", "$", "k",
+        "mil", "precio", "valor", "venta en", "negociable",
+        "oferta", "rebajado"
+    ]
+
     for p in precio_keywords:
         if p in texto:
             boost += 0.10
 
     # Metraje
-    metraje_keywords = ["m2", "mts", "metros", "m²"]
+    metraje_keywords = [
+        "m2", "mts", "metros", "m²", "metros cuadrados",
+        "superficie", "área", "area", "tamaño"
+    ]
+
     for m in metraje_keywords:
         if m in texto:
             boost += 0.10
 
     # Operación
-    operacion_keywords = ["venta", "alquiler", "alquilo", "arrendamiento"]
+    operacion_keywords = [
+        "venta", "vendo", "se vende",
+        "alquiler", "alquilo", "se alquila",
+        "arrendamiento", "canon", "mensualidad"
+    ]
+
     for op in operacion_keywords:
         if op in texto:
             boost += 0.10
 
+    caracteristicas_keywords = [
+        "remodelado", "nuevo", "a estrenar", "estrenar",
+        "amoblado", "equipado",
+        "vista", "panorámica", "panoramica",
+        "seguridad", "vigilancia", "conjunto cerrado",
+        "piscina", "gimnasio", "salón de fiesta",
+        "terraza", "balcón", "balcon",
+        "estacionamiento", "puesto", "garaje"
+    ]
+    for c in caracteristicas_keywords:
+        if c in texto:
+            boost += 0.05
+    
     # Score final híbrido
     score_final = similitud + boost
 
