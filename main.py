@@ -253,6 +253,10 @@ def buscar_semantico(q: str, k: int = 5):
         resultados = []
 
         for message_id, text, chat, sender, ts, emb_blob in rows:
+            # Convertir string "[0.1, -0.2, ...]" a lista real
+            if isinstance(emb_blob, str):
+                emb_blob = ast.literal_eval(emb_blob)
+            
             # emb_blob ya es un vector (lista de floats)
             emb_vec = np.array(emb_blob, dtype=np.float32)
 
