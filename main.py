@@ -253,9 +253,10 @@ def buscar_semantico(q: str, k: int = 5):
         resultados = []
 
         for message_id, text, chat, sender, ts, emb_blob in rows:
-            emb_vec = np.frombuffer(emb_blob, dtype=np.float32)
+            # emb_blob ya es un vector (lista de floats)
+            emb_vec = np.array(emb_blob, dtype=np.float32)
 
-            # Producto punto directo (coseno) porque emb_vec ya está normalizado
+            # Producto punto directo (coseno)
             sim = np.dot(query_vec, emb_vec)
 
             resultados.append({
@@ -279,7 +280,6 @@ def buscar_semantico(q: str, k: int = 5):
 
     except Exception as e:
         return {"error": str(e)}
-
 
 # -----------------------------
 # BÚSQUEDA AVANZADA
