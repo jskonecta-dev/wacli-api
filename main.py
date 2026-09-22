@@ -499,57 +499,186 @@ def buscar_hibrido(
 
 # Buscar avanzado
 @app.get("/buscar_avanzado")
-def buscar_avanzado(chat_name: str = None, from_date: str = None, to_date: str = None, q: str = None):
-    query = """
-        SELECT message_id,
-               chat_name,
-               sender_name,
-               ts,
-               text
-        FROM messages
-        WHERE 1=1
-    """
-    params = []
-
-    if chat_name:
-        query += " AND chat_name ILIKE %s"
-        params.append(f"%{chat_name}%")
-
-    if from_date and to_date:
-        from_ts = int(datetime.strptime(from_date, "%Y-%m-%d").timestamp())
-        to_ts = int(datetime.strptime(to_date, "%Y-%m-%d").timestamp())
-        query += " AND ts BETWEEN %s AND %s"
-        params.extend([from_ts, to_ts])
-    elif from_date:
-        from_ts = int(datetime.strptime(from_date, "%Y-%m-%d").timestamp())
-        query += " AND ts >= %s"
-        params.append(from_ts)
-    elif to_date:
-        to_ts = int(datetime.strptime(to_date, "%Y-%m-%d").timestamp())
-        query += " AND ts <= %s"
-        params.append(to_ts)
-
-    if q:
-        query += " AND text ILIKE %s"
-        params.append(f"%{q}%")
-
+def buscar_avanzado(
+    q: str = "",
+    precio_min: int = Query(None),
+    precio_max: int = Query(None),
+    ubicacion: str = Query(None),
+    tipo: str = Query(None),
+    metraje_min: int = Query(None),
+    metraje_max: int = Query(None),
+    k: int = 10
+):
     try:
+        # Crear embedding de la consulta
+        query_emb = client.embeddings.create(
+            model="text-embedding-3-small",
+            input=q
+        ).data[0].embedding
+
+        query_str = "[" + ",".join(str(x) for x in query_emb) + "]"
+
         conn = get_conn()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute(query, params)
+        cur = conn.cursor()
+
+        # Filtros SQL
+        filtros = []
+        params = []
+
+        if precio_min is not None:
+            filtros.append("precioVenta >= %s")
+            params.append(precio_min)
+
+        if precio_max is not None:
+            filtros.append("precioVenta <= %s")
+            params.append(precio_max)
+
+        if ubicacion:
+            filtros.append("LOWER(ubicacion) = LOWER(%s)")
+            params.append(ubicacion)
+
+        if tipo:
+            filtros.append("LOWER(tipo_inmueble) = LOWER(%s)")
+            params.append(tipo)
+
+        if metraje_min is not None:
+            filtros.append("metraje >= %s")
+            params.append(metraje_min)
+
+        if metraje_max is not None:
+            filtros.append("metraje <= %s")
+            params.append(metraje_max)
+
+        where_clause = ""
+        if filtros:
+            where_clause = "WHERE " + " AND ".join(filtros)
+
+        # Consulta con pgvector
+        sql = f"""
+            SELECT message_id, text, chat_name, sender_name, ts,
+                   precioVenta, alquiler, ubicacion, tipo_inmueble, metraje, descripcion,
+                   (embedding <-> %s::vector) AS distancia
+            FROM message_embeddings
+            {where_clause}
+            ORDER BY embedding <-> %s::vector
+            LIMIT 50
+        """
+
+        # Parámetros dinámicos
+        if params:
+            cur.execute(sql, [query_str] + params + [query_str])
+        else:
+            cur.execute(sql, [query_str, query_str])
+
         rows = cur.fetchall()
-        cur.close()
         conn.close()
+
+        resultados = []
+
+        for r in rows:
+    distancia = float(r[11])
+    similitud = 1 - distancia
+
+    # Convertir timestamp a fecha y hora legibles
+    fecha_hora = formatear_timestamp(r[4])
+    fecha = fecha_hora["fecha"] if fecha_hora else None
+    hora = fecha_hora["hora"] if fecha_hora else None
+
+    texto = (r[1] or "").lower()
+
+    # BOOSTING
+    boost = 0
+
+    # Coincidencia exacta de ubicación (columna)
+    if ubicacion and r[7] and ubicacion.lower() == r[7].lower():
+        boost += 0.30
+
+    # Coincidencia exacta de tipo (columna)
+    if tipo and r[8] and tipo.lower() == r[8].lower():
+        boost += 0.25
+
+    # Coincidencia exacta de precio dentro del rango (columna)
+    if precio_min is not None and precio_max is not None and r[5]:
+        if precio_min <= r[5] <= precio_max:
+            boost += 0.20
+
+    # Coincidencia exacta de metraje (columna)
+    if metraje_min is not None and r[9] and r[9] >= metraje_min:
+        boost += 0.15
+
+    # -----------------------------
+    # BOOSTING SEMÁNTICO (texto)
+    # -----------------------------
+
+    # Ubicaciones comunes
+    ubicaciones_keywords = [
+        "altamira", "la lagunita", "santa rosa de lima",
+        "las mercedes", "el hatillo", "la castellana"
+    ]
+    for u in ubicaciones_keywords:
+        if u in texto:
+            boost += 0.20
+
+    # Tipos de inmueble
+    tipos_keywords = ["apartamento", "casa", "oficina", "local", "galpón"]
+    for t in tipos_keywords:
+        if t in texto:
+            boost += 0.15
+
+    # Precio
+    precio_keywords = ["usd", "dolares", "dólares", "$", "k"]
+    for p in precio_keywords:
+        if p in texto:
+            boost += 0.10
+
+    # Metraje
+    metraje_keywords = ["m2", "mts", "metros", "m²"]
+    for m in metraje_keywords:
+        if m in texto:
+            boost += 0.10
+
+    # Operación
+    operacion_keywords = ["venta", "alquiler", "alquilo", "arrendamiento"]
+    for op in operacion_keywords:
+        if op in texto:
+            boost += 0.10
+
+    # Score final híbrido
+    score_final = similitud + boost
+
+    resultados.append({
+        "message_id": r[0],
+        "text": r[1],
+        "chat": r[2],
+        "sender": r[3],
+        "ts": r[4],
+        "fecha": fecha,
+        "hora": hora,
+        "precioVenta": r[5],
+        "alquiler": r[6],
+        "ubicacion": r[7],
+        "tipo_inmueble": r[8],
+        "metraje": r[9],
+        "descripcion": r[10],
+        "similaridad": similitud,
+        "boost": boost,
+        "score_final": score_final
+    })
+
+        # for r in rows:
+            
+           
+
+        # Orden final por score híbrido
+        resultados.sort(key=lambda x: x["score_final"], reverse=True)
+
+        return {
+            "query": q,
+            "resultados": resultados[:k]
+        }
+
     except Exception as e:
-        return JSONResponse(content={"error": str(e)})
+        return {"error": str(e)}
 
-    resultados = []
-    for row in rows:
-        ts_val = row.get("ts")
-        fecha_hora = formatear_timestamp(ts_val)
-        row["fecha"] = fecha_hora["fecha"] if fecha_hora else None
-        row["hora"] = fecha_hora["hora"] if fecha_hora else None
-        resultados.append(row)
-
-    return JSONResponse(content=resultados)
+    
 
