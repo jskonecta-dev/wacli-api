@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
+from fastapi import Query
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
@@ -397,6 +398,129 @@ def debug_columns():
         return JSONResponse(content={"columns": cols})
     except Exception as e:
         return JSONResponse(content={"error": str(e)})
+
+# endpoint /buscar_hibrido
+@app.get("/buscar_hibrido")
+def buscar_hibrido(
+    q: str = "",
+    precio_min: int = Query(None),
+    precio_max: int = Query(None),
+    ubicacion: str = Query(None),
+    tipo: str = Query(None),
+    metraje_min: int = Query(None),
+    metraje_max: int = Query(None),
+    k: int = 10
+):
+    try:
+        # Crear embedding de la consulta
+        query_emb = client.embeddings.create(
+            model="text-embedding-3-small",
+            input=q
+        ).data[0].embedding
+
+        query_vec = np.array(query_emb, dtype=np.float32)
+
+        # Normalizar
+        norm = np.linalg.norm(query_vec)
+        if norm > 0:
+            query_vec = query_vec / norm
+
+        conn = get_conn()
+        cur = conn.cursor()
+
+        # Construir SQL dinámico
+        filtros = []
+        params = []
+
+        if precio_min is not None:
+            filtros.append("precioVenta >= %s")
+            params.append(precio_min)
+
+        if precio_max is not None:
+            filtros.append("precioVenta <= %s")
+            params.append(precio_max)
+
+        if ubicacion:
+            filtros.append("LOWER(ubicacion) = LOWER(%s)")
+            params.append(ubicacion)
+
+        if tipo:
+            filtros.append("LOWER(tipo_inmueble) = LOWER(%s)")
+            params.append(tipo)
+
+        if metraje_min is not None:
+            filtros.append("metraje >= %s")
+            params.append(metraje_min)
+
+        if metraje_max is not None:
+            filtros.append("metraje <= %s")
+            params.append(metraje_max)
+
+        where_clause = ""
+        if filtros:
+            where_clause = "WHERE " + " AND ".join(filtros)
+
+        sql = f"""
+            SELECT message_id, text, chat_name, sender_name, ts,
+                   embedding, precioVenta, alquiler, ubicacion,
+                   tipo_inmueble, metraje, descripcion
+            FROM message_embeddings
+            {where_clause}
+        """
+
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+
+        resultados = []
+
+        for message_id, text, chat, sender, ts, emb_blob, precioVenta, alquiler, ubicacion_db, tipo_db, metraje_db, descripcion_db in rows:
+
+            # Convertir string "[0.1, -0.2, ...]" a lista real
+            if isinstance(emb_blob, str):
+                emb_blob = ast.literal_eval(emb_blob)
+
+            emb_vec = np.array(emb_blob, dtype=np.float32)
+
+            # Similitud coseno
+            sim = np.dot(query_vec, emb_vec)
+
+            resultados.append({
+                "message_id": message_id,
+                "text": text,
+                "chat": chat,
+                "sender": sender,
+                "ts": ts,
+                "similaridad": float(sim),
+                "precioVenta": precioVenta,
+                "alquiler": alquiler,
+                "ubicacion": ubicacion_db,
+                "tipo_inmueble": tipo_db,
+                "metraje": metraje_db,
+                "descripcion": descripcion_db
+            })
+
+        conn.close()
+
+        # Ordenar por similaridad
+        resultados.sort(key=lambda x: x["similaridad"], reverse=True)
+
+        return {
+            "query": q,
+            "filtros": {
+                "precio_min": precio_min,
+                "precio_max": precio_max,
+                "ubicacion": ubicacion,
+                "tipo": tipo,
+                "metraje_min": metraje_min,
+                "metraje_max": metraje_max
+            },
+            "resultados": resultados[:k]
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
 
 
 # Buscar avanzado
