@@ -239,54 +239,46 @@ def buscar_semantico(q: str, k: int = 5):
             input=q
         ).data[0].embedding
 
-        query_vec = np.array(query_emb, dtype=np.float32)
-
-        # Normalizar el vector de la consulta
-        norm = np.linalg.norm(query_vec)
-        if norm > 0:
-            query_vec = query_vec / norm
+        # Convertir a formato pgvector
+        query_str = "[" + ",".join(str(x) for x in query_emb) + "]"
 
         conn = get_conn()
         cur = conn.cursor()
 
-        cur.execute("SELECT message_id, text, chat_name, sender_name, ts, embedding FROM message_embeddings")
+        # Usar pgvector para calcular similitud en SQL
+        cur.execute("""
+            SELECT message_id, text, chat_name, sender_name, ts,
+                   precioVenta, alquiler, ubicacion, tipo_inmueble, metraje, descripcion,
+                   (embedding <-> %s::vector) AS distancia
+            FROM message_embeddings
+            ORDER BY embedding <-> %s::vector
+            LIMIT %s
+        """, (query_str, query_str, k))
+
         rows = cur.fetchall()
-
-        resultados = []
-
-        for message_id, text, chat, sender, ts, emb_blob in rows:
-            # Convertir string "[0.1, -0.2, ...]" a lista real
-            if isinstance(emb_blob, str):
-                emb_blob = ast.literal_eval(emb_blob)
-            
-            # emb_blob ya es un vector (lista de floats)
-            emb_vec = np.array(emb_blob, dtype=np.float32)
-
-            # Producto punto directo (coseno)
-            sim = np.dot(query_vec, emb_vec)
-
-            resultados.append({
-                "message_id": message_id,
-                "text": text,
-                "chat": chat,
-                "sender": sender,
-                "ts": ts,
-                "similaridad": float(sim)
-            })
-
         conn.close()
 
-        # Ordenar por similaridad descendente
-        resultados.sort(key=lambda x: x["similaridad"], reverse=True)
+        resultados = []
+        for r in rows:
+            resultados.append({
+                "message_id": r[0],
+                "text": r[1],
+                "chat": r[2],
+                "sender": r[3],
+                "ts": r[4],
+                "precioVenta": r[5],
+                "alquiler": r[6],
+                "ubicacion": r[7],
+                "tipo_inmueble": r[8],
+                "metraje": r[9],
+                "descripcion": r[10],
+                "similaridad": float(1 - r[11])  # distancia → similitud
+            })
 
-        return {
-            "query": q,
-            "resultados": resultados[:k]
-        }
+        return {"query": q, "resultados": resultados}
 
     except Exception as e:
         return {"error": str(e)}
-
 # -----------------------------
 # BÚSQUEDA AVANZADA
 # -----------------------------
@@ -418,17 +410,13 @@ def buscar_hibrido(
             input=q
         ).data[0].embedding
 
-        query_vec = np.array(query_emb, dtype=np.float32)
-
-        # Normalizar
-        norm = np.linalg.norm(query_vec)
-        if norm > 0:
-            query_vec = query_vec / norm
+        # Convertir embedding a formato pgvector
+        query_str = "[" + ",".join(str(x) for x in query_emb) + "]"
 
         conn = get_conn()
         cur = conn.cursor()
 
-        # Construir SQL dinámico
+        # Construir filtros SQL dinámicos
         filtros = []
         params = []
 
@@ -460,49 +448,38 @@ def buscar_hibrido(
         if filtros:
             where_clause = "WHERE " + " AND ".join(filtros)
 
+        # Consulta optimizada con pgvector
         sql = f"""
             SELECT message_id, text, chat_name, sender_name, ts,
-                   embedding, precioVenta, alquiler, ubicacion,
-                   tipo_inmueble, metraje, descripcion
+                   precioVenta, alquiler, ubicacion, tipo_inmueble, metraje, descripcion,
+                   (embedding <-> %s::vector) AS distancia
             FROM message_embeddings
             {where_clause}
+            ORDER BY embedding <-> %s::vector
+            LIMIT %s
         """
 
-        cur.execute(sql, params)
+        cur.execute(sql, [query_str, query_str, k] if not params else [query_str] + params + [query_str, k])
         rows = cur.fetchall()
+        conn.close()
 
         resultados = []
 
-        for message_id, text, chat, sender, ts, emb_blob, precioVenta, alquiler, ubicacion_db, tipo_db, metraje_db, descripcion_db in rows:
-
-            # Convertir string "[0.1, -0.2, ...]" a lista real
-            if isinstance(emb_blob, str):
-                emb_blob = ast.literal_eval(emb_blob)
-
-            emb_vec = np.array(emb_blob, dtype=np.float32)
-
-            # Similitud coseno
-            sim = np.dot(query_vec, emb_vec)
-
+        for r in rows:
             resultados.append({
-                "message_id": message_id,
-                "text": text,
-                "chat": chat,
-                "sender": sender,
-                "ts": ts,
-                "similaridad": float(sim),
-                "precioVenta": precioVenta,
-                "alquiler": alquiler,
-                "ubicacion": ubicacion_db,
-                "tipo_inmueble": tipo_db,
-                "metraje": metraje_db,
-                "descripcion": descripcion_db
+                "message_id": r[0],
+                "text": r[1],
+                "chat": r[2],
+                "sender": r[3],
+                "ts": r[4],
+                "precioVenta": r[5],
+                "alquiler": r[6],
+                "ubicacion": r[7],
+                "tipo_inmueble": r[8],
+                "metraje": r[9],
+                "descripcion": r[10],
+                "similaridad": float(1 - r[11])  # distancia → similitud
             })
-
-        conn.close()
-
-        # Ordenar por similaridad
-        resultados.sort(key=lambda x: x["similaridad"], reverse=True)
 
         return {
             "query": q,
@@ -514,14 +491,11 @@ def buscar_hibrido(
                 "metraje_min": metraje_min,
                 "metraje_max": metraje_max
             },
-            "resultados": resultados[:k]
+            "resultados": resultados
         }
 
     except Exception as e:
         return {"error": str(e)}
-
-
-
 
 # Buscar avanzado
 @app.get("/buscar_avanzado")
