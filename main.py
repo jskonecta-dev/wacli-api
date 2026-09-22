@@ -6,6 +6,7 @@ from datetime import datetime
 from openai import OpenAI
 import numpy as np
 import os
+import ast
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 app = FastAPI()
