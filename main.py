@@ -21,6 +21,29 @@ async def no_cache_middleware(request: Request, call_next):
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+# -----------------------------
+# pago movil -> csv entre fechas
+# -----------------------------
+@app.get("/pagomovil_csv")
+def pagomovil_csv(chat: str, desde: str, hasta: str):
+    # Por ahora solo devolvemos los parámetros
+    return {
+        "mensaje": "Ruta pagomovil_csv funcionando",
+        "chat": chat,
+        "desde": desde,
+        "hasta": hasta
+    }
+
+
+
+
+
+
+
+
+
+
+
 
 # -----------------------------
 # STOPWORDS
