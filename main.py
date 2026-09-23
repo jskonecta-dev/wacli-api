@@ -24,37 +24,41 @@ async def no_cache_middleware(request: Request, call_next):
 # -----------------------------
 # pago movil -> csv entre fechas
 # -----------------------------
+from datetime import datetime
+from psycopg2.extras import RealDictCursor
+
 @app.get("/pagomovil_csv")
 def pagomovil_csv(chat: str, desde: str, hasta: str):
-    # Convertir fechas a timestamps
+
+    # Convertir fechas YYYY-MM-DD a timestamp
     from_ts = int(datetime.strptime(desde, "%Y-%m-%d").timestamp())
     to_ts = int(datetime.strptime(hasta, "%Y-%m-%d").timestamp())
 
-    # Construir query
+    # Consulta SQL
     query = """
         SELECT message_id, chat_name, sender_name, ts, text
         FROM messages
         WHERE chat_name ILIKE %s
         AND ts BETWEEN %s AND %s
+        ORDER BY ts ASC
     """
 
     params = [f"%{chat}%", from_ts, to_ts]
 
-    # Ejecutar
+    # Ejecutar consulta
     conn = get_conn()
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute(query, params)
     rows = cur.fetchall()
     cur.close()
     conn.close()
-    # Por ahora solo devolvemos los parámetros
-    return {
-        "mensaje": "Ruta pagomovil_csv funcionando",
-        "chat": chat,
-        "desde": desde,
-        "hasta": hasta
-    }
 
+    # Por ahora solo devolvemos los mensajes encontrados
+    return {
+        "mensaje": "Mensajes encontrados",
+        "cantidad": len(rows),
+        "data": rows
+    }
 
 # -----------------------------
 # STOPWORDS
