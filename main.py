@@ -65,8 +65,8 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
     # devolvemos los mensajes que parecen pago movil
     return {
         "mensaje": "Mensajes encontrados",
-        "cantidad": len(rows),
-        "data": rows
+        "cantidad": len(pagos),
+        "data": pagos
     }
 # ---DETECTOR DE PAGOS MOVILES
 
