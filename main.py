@@ -26,6 +26,27 @@ async def no_cache_middleware(request: Request, call_next):
 # -----------------------------
 @app.get("/pagomovil_csv")
 def pagomovil_csv(chat: str, desde: str, hasta: str):
+    # Convertir fechas a timestamps
+    from_ts = int(datetime.strptime(desde, "%Y-%m-%d").timestamp())
+    to_ts = int(datetime.strptime(hasta, "%Y-%m-%d").timestamp())
+
+    # Construir query
+    query = """
+        SELECT message_id, chat_name, sender_name, ts, text
+        FROM messages
+        WHERE chat_name ILIKE %s
+        AND ts BETWEEN %s AND %s
+    """
+
+    params = [f"%{chat}%", from_ts, to_ts]
+
+    # Ejecutar
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(query, params)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
     # Por ahora solo devolvemos los parámetros
     return {
         "mensaje": "Ruta pagomovil_csv funcionando",
@@ -33,16 +54,6 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
         "desde": desde,
         "hasta": hasta
     }
-
-
-
-
-
-
-
-
-
-
 
 
 # -----------------------------
