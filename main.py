@@ -21,7 +21,36 @@ async def no_cache_middleware(request: Request, call_next):
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+
+# es pago movil? 
 # -----------------------------
+
+def es_pago_movil(texto: str) -> bool:
+    if not texto:
+        return False
+
+    texto = texto.lower()
+
+    patrones = [
+        "pagomóvil",
+        "pago móvil",
+        "operación",
+        "bs",
+        "bolívares",
+        "transferencia",
+        "bdv",
+        "bancamiga",
+        "pago",
+        "enviado",
+        "transferí",
+        "te mando",
+        "me llegó"
+    ]
+
+    return any(p in texto for p in patrones)
+
+
+
 # pago movil -> csv entre fechas
 # -----------------------------
 from datetime import datetime
@@ -53,12 +82,16 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
     cur.close()
     conn.close()
 
-    # Por ahora solo devolvemos los mensajes encontrados
+    # Filtrar solo pagos móviles
+    pagos = [msg for msg in rows if es_pago_movil(msg["text"])]
+
+    # devolvemos los mensajes que parecen pago movil
     return {
         "mensaje": "Mensajes encontrados",
         "cantidad": len(rows),
         "data": rows
     }
+# ---DETECTOR DE PAGOS MOVILES
 
 # -----------------------------
 # STOPWORDS
