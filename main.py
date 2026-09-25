@@ -7,9 +7,43 @@ from openai import OpenAI
 import numpy as np
 import os
 import difflib
+import re
+import pytesseract
+from PIL import Image
+import csv
+import io
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 app = FastAPI()
+
+def extraer_datos_soporte(local_path):
+    try:
+        img = Image.open(local_path)
+    except Exception as e:
+        return {
+            "fecha": "",
+            "monto": "",
+            "operacion": "",
+            "banco": "",
+            "ocr": f"Error cargando imagen: {e}"
+        }
+
+    texto = pytesseract.image_to_string(img)
+
+    fecha = re.search(r"\d{2}/\d{2}/\d{4}", texto)
+    monto = re.search(r"Bs\s?[\d\.,]+", texto)
+    operacion = re.search(r"\d{9,15}", texto)
+
+    bancos = ["BDV", "Bancamiga", "Provincial", "Mercantil", "Banplus"]
+    banco = next((b for b in bancos if b.lower() in texto.lower()), "")
+
+    return {
+        "fecha": fecha.group(0) if fecha else "",
+        "monto": monto.group(0) if monto else "",
+        "operacion": operacion.group(0) if operacion else "",
+        "banco": banco,
+        "ocr": texto
+    }
 
 # -----------------------------
 # MIDDLEWARE NO CACHE
@@ -34,6 +68,8 @@ def es_pago_movil(texto: str) -> bool:
 from datetime import datetime
 from psycopg2.extras import RealDictCursor
 
+
+# ---DETECTOR DE PAGOS MOVILES produce csv
 @app.get("/pagomovil_csv")
 def pagomovil_csv(chat: str, desde: str, hasta: str):
 
@@ -81,13 +117,35 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
 
     # Filtrar solo pagos móviles
     pagos = [msg for msg in rows if es_pago_movil(msg["text"])]
-    # devolvemos los mensajes que parecen pago movil
-    return {
-        "mensaje": "Mensajes encontrados",
-        "cantidad": len(pagos),
-        "data": pagos
-    }
-# ---DETECTOR DE PAGOS MOVILES
+
+    # Si no hay pagos móviles, devolvemos CSV vacío
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Fecha","Banco","Monto","Operacion","Mensaje","Imagen"])
+
+    # Procesar cada pago móvil
+    for p in pagos:
+
+        # Si no hay imagen real, usar una imagen de prueba
+        local_path = p["local_path"] or "/app/static/soporte_prueba.png"
+
+        datos = extraer_datos_soporte(local_path)
+
+        writer.writerow([
+            datos["fecha"],
+            datos["banco"],
+            datos["monto"],
+            datos["operacion"],
+            p["text"],
+            local_path
+        ])
+
+    csv_data = output.getvalue()
+
+    return Response(
+        content=csv_data,
+        media_type="text/csv"
+    )
 
 # -----------------------------
 # STOPWORDS
