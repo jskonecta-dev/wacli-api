@@ -18,8 +18,6 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# extraer datos para el csv
-
 def extraer_datos_soporte(local_path):
     try:
         img = Image.open(local_path)
