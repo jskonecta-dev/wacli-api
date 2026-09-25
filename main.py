@@ -9,7 +9,7 @@ import numpy as np
 import os
 import difflib
 import re
-import pytesseract
+# import pytesseract
 from PIL import Image
 import csv
 import io
