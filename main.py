@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request, Query
 from fastapi.responses import JSONResponse, Response
-from fastapi.staticfiles import StaticFiles
+# from fastapi.staticfiles import StaticFiles
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
@@ -16,7 +16,7 @@ import io
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# app.mount("/static", StaticFiles(directory="static"), name="static")
 
 def extraer_datos_soporte(local_path):
     try:
