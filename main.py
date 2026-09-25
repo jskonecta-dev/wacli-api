@@ -43,11 +43,30 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
 
     # Consulta SQL
     query = """
-        SELECT message_id, chat_name, sender_name, ts, text
-        FROM messages
-        WHERE chat_name ILIKE %s
-        AND ts BETWEEN %s AND %s
-        ORDER BY ts ASC
+    SELECT 
+        message_id,
+        chat_name,
+        sender_name,
+        ts,
+        text,
+        media_type,
+        filename,
+        mime_type,
+        local_path,
+        direct_path,
+        file_length,
+        media_key,
+        file_sha256,
+        file_enc_sha256,
+        ocr_text,
+        banco,
+        monto,
+        operacion,
+        fecha_soporte
+    FROM messages
+    WHERE chat_name ILIKE %s
+    AND ts BETWEEN %s AND %s
+    ORDER BY ts ASC;
     """
 
     params = [f"%{chat}%", from_ts, to_ts]
