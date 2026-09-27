@@ -587,4 +587,27 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=pagos.csv"}
     )
-        
+
+
+@app.get("/debug_chat")
+def debug_chat(chat: str):
+    try:
+        conn = get_conn()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute("""
+            SELECT message_id, chat_name, chat, sender_name, ts, text, local_path
+            FROM messages
+            WHERE chat_name ILIKE %s OR chat ILIKE %s
+            ORDER BY ts DESC
+            LIMIT 20;
+        """, (f"%{chat}%", f"%{chat}%"))
+
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        return rows
+
+    except Exception as e:
+        return {"error": str(e)}
