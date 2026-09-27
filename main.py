@@ -634,6 +634,7 @@ def debug_columns():
     except Exception as e:
         return {"error": str(e)}
 
+
 @app.get("/debug_chat")
 def debug_chat(chat: str):
     try:
@@ -656,5 +657,6 @@ def debug_chat(chat: str):
 
     except Exception as e:
         return {"error": str(e)}
+
 
 
