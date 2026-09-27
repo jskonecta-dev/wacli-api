@@ -9,43 +9,16 @@ import numpy as np
 import os
 import difflib
 import re
-# import pytesseract
 from PIL import Image
 import csv
 import io
+from io import StringIO
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-def extraer_datos_soporte(local_path):
-    try:
-        img = Image.open(local_path)
-    except Exception as e:
-        return {
-            "fecha": "",
-            "monto": "",
-            "operacion": "",
-            "banco": "",
-            "ocr": f"Error cargando imagen: {e}"
-        }
-
-    texto = pytesseract.image_to_string(img)
-
-    fecha = re.search(r"\d{2}/\d{2}/\d{4}", texto)
-    monto = re.search(r"Bs\s?[\d\.,]+", texto)
-    operacion = re.search(r"\d{9,15}", texto)
-
-    bancos = ["BDV", "Bancamiga", "Provincial", "Mercantil", "Banplus"]
-    banco = next((b for b in bancos if b.lower() in texto.lower()), "")
-
-    return {
-        "fecha": fecha.group(0) if fecha else "",
-        "monto": monto.group(0) if monto else "",
-        "operacion": operacion.group(0) if operacion else "",
-        "banco": banco,
-        "ocr": texto
-    }
 
 # -----------------------------
 # MIDDLEWARE NO CACHE
@@ -58,106 +31,6 @@ async def no_cache_middleware(request: Request, call_next):
     response.headers["Expires"] = "0"
     return response
 
-# es pago movil? 
-# -----------------------------
-def es_pago_movil(texto: str) -> bool:
-    if not texto:
-        return False
-    return "soporte del pago movil" in texto.lower()
-
-# pago movil -> csv entre fechas
-# -----------------------------
-from datetime import datetime
-from psycopg2.extras import RealDictCursor
-
-
-# ---DETECTOR DE PAGOS MOVILES produce csv
-@app.get("/pagomovil_csv")
-def pagomovil_csv(chat: str, desde: str, hasta: str):
-
-    # Convertir fechas YYYY-MM-DD a timestamp
-    from_ts = int(datetime.strptime(desde, "%Y-%m-%d").timestamp())
-    to_ts = int(datetime.strptime(hasta, "%Y-%m-%d").timestamp())
-
-    # Consulta SQL
-    query = """
-    SELECT 
-        message_id,
-        chat_name,
-        sender_name,
-        ts,
-        text,
-        media_type,
-        filename,
-        mime_type,
-        local_path,
-        direct_path,
-        file_length,
-        media_key,
-        file_sha256,
-        file_enc_sha256,
-        ocr_text,
-        banco,
-        monto,
-        operacion,
-        fecha_soporte
-    FROM messages
-    WHERE chat_name ILIKE %s
-    AND ts BETWEEN %s AND %s
-    ORDER BY ts ASC;
-    """
-
-    params = [f"%{chat}%", from_ts, to_ts]
-
-    # Ejecutar consulta
-    conn = get_conn()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute(query, params)
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
-
-    # Filtrar solo pagos móviles
-    pagos = [msg for msg in rows if es_pago_movil(msg["text"])]
-
-    # Si no hay pagos móviles, devolvemos CSV vacío
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["Fecha","Banco","Monto","Operacion","Mensaje","Imagen"])
-
-    # Procesar cada pago móvil
-    for p in pagos:
-
-        # Si no hay imagen real, usar una imagen de prueba
-        local_path = p["local_path"] or "/app/static/soporte_prueba.png"
-
-        datos = extraer_datos_soporte(local_path)
-
-        writer.writerow([
-            datos["fecha"],
-            datos["banco"],
-            datos["monto"],
-            datos["operacion"],
-            p["text"],
-            local_path
-        ])
-
-    csv_data = output.getvalue()
-
-    return Response(
-        content=csv_data,
-        media_type="text/csv"
-    )
-
-# -----------------------------
-# STOPWORDS
-# -----------------------------
-STOPWORDS = {"hay", "el", "la", "los", "las", "que", "de", "y", "a", "un", "una", "en", "con", "por", "para", "se", "del", "al", "cuando", "si"}
-
-def limpiar_consulta(q: str) -> str:
-    tokens = q.lower().split()
-    tokens_filtrados = [t for t in tokens if t not in STOPWORDS]
-    return " ".join(tokens_filtrados)
 
 # -----------------------------
 # CONEXIÓN A NEON
@@ -172,17 +45,9 @@ def get_conn():
         sslmode="require"
     )
 
-# -----------------------------
-# NORMALIZAR EMBEDDING
-# -----------------------------
-def normalize(vec):
-    norm = np.linalg.norm(vec)
-    if norm > 0:
-        return vec / norm
-    return vec
 
 # -----------------------------
-# FUZZY MATCHING
+# FUZZY MATCHING GENERAL
 # -----------------------------
 def fuzzy_match(word, text):
     text_words = text.split()
@@ -191,6 +56,7 @@ def fuzzy_match(word, text):
         if ratio >= 0.75:
             return True
     return False
+
 
 # -----------------------------
 # TIMESTAMP
@@ -209,6 +75,7 @@ def convertir_timestamp(ts):
 
     return datetime.utcfromtimestamp(ts / 1000)
 
+
 def formatear_timestamp(ts):
     dt = convertir_timestamp(ts)
     if dt is None:
@@ -218,8 +85,24 @@ def formatear_timestamp(ts):
         "hora": dt.strftime("%H:%M:%S")
     }
 
+
 # -----------------------------
-# BÚSQUEDA SIMPLE
+# STOPWORDS
+# -----------------------------
+STOPWORDS = {
+    "hay", "el", "la", "los", "las", "que", "de", "y", "a", "un", "una",
+    "en", "con", "por", "para", "se", "del", "al", "cuando", "si"
+}
+
+
+def limpiar_consulta(q: str) -> str:
+    tokens = q.lower().split()
+    tokens_filtrados = [t for t in tokens if t not in STOPWORDS]
+    return " ".join(tokens_filtrados)
+
+
+# -----------------------------
+# BÚSQUEDA SIMPLE EN WACLI
 # -----------------------------
 def buscar_en_wacli(query):
     conn = get_conn()
@@ -249,6 +132,7 @@ def buscar_en_wacli(query):
         for r in resultados
     ]
 
+
 @app.get("/seleccionar_chat")
 async def seleccionar_chat():
     try:
@@ -262,6 +146,7 @@ async def seleccionar_chat():
         return JSONResponse(content=chats)
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
+
 
 # -----------------------------
 # CREAR TABLA EMBEDDINGS
@@ -291,6 +176,17 @@ def crear_tabla():
     conn.commit()
     conn.close()
     return {"status": "tabla creada"}
+
+
+# -----------------------------
+# NORMALIZAR EMBEDDING
+# -----------------------------
+def normalize(vec):
+    norm = np.linalg.norm(vec)
+    if norm > 0:
+        return vec / norm
+    return vec
+
 
 # -----------------------------
 # BÚSQUEDA SEMÁNTICA
@@ -342,8 +238,9 @@ def buscar_semantico(q: str, k: int = 5):
     except Exception as e:
         return {"error": str(e)}
 
+
 # -----------------------------
-# BÚSQUEDA AVANZADA (FINAL)
+# BÚSQUEDA AVANZADA
 # -----------------------------
 @app.get("/buscar_avanzado")
 def buscar_avanzado(
@@ -418,6 +315,7 @@ def buscar_avanzado(
 
         rows = cur.fetchall()
         conn.close()
+conn.close()
 
         # Palabras clave
         ubicaciones_keywords = [
@@ -565,5 +463,128 @@ def buscar_avanzado(
         return {"error": str(e)}
 
 
-    
+# -----------------------------
+# PAGO MÓVIL — FUZZY MATCHING
+# -----------------------------
+def es_pago_movil(texto: str):
+    if not texto:
+        return False
 
+    texto = texto.lower()
+    claves = [
+        "pago movil", "pago móvil", "pago mov", "pago movi",
+        "pago", "movil", "móvil", "pm",
+        "bancamiga", "venezuela", "banesco", "provincial",
+        "pago por", "pago listo", "pago hecho"
+    ]
+    return any(c in texto for c in claves)
+
+
+# -----------------------------
+# OCR SIMULADO PARA SOPORTE
+# -----------------------------
+def extraer_datos_soporte(local_path):
+    return {
+        "fecha": "21/09/2026 09:37 am",
+        "banco": "Banco de Venezuela",
+        "monto": "50.000,00",
+        "operacion": "093730929909",
+        "mensaje": "servicios",
+        "imagen": local_path
+    }
+
+
+# -----------------------------
+# ENDPOINT PAGO MÓVIL -> CSV
+# -----------------------------
+@app.get("/pagomovil_csv")
+def pagomovil_csv(chat: str, desde: str, hasta: str):
+
+    # Validación de fechas
+    try:
+        fecha_desde = datetime.fromisoformat(desde)
+        fecha_hasta = datetime.fromisoformat(hasta)
+    except:
+        return JSONResponse(
+            {"mensaje": "Formato de fecha inválido. Use YYYY-MM-DD."},
+            status_code=400
+        )
+
+    from_ts = int(fecha_desde.timestamp())
+    to_ts = int(fecha_hasta.timestamp())
+
+    query = """
+    SELECT 
+        message_id,
+        chat_name,
+        sender_name,
+        ts,
+        text,
+        media_type,
+        filename,
+        mime_type,
+        local_path,
+        direct_path,
+        file_length,
+        media_key,
+        file_sha256,
+        file_enc_sha256,
+        ocr_text,
+        banco,
+        monto,
+        operacion,
+        fecha_soporte
+    FROM messages
+    WHERE chat_name ILIKE %s
+    AND ts BETWEEN %s AND %s
+    ORDER BY ts ASC;
+    """
+
+    params = [f"%{chat}%", from_ts, to_ts]
+
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(query, params)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    if len(rows) == 0:
+        return JSONResponse(
+            {"mensaje": "No se encontraron mensajes para ese chat en ese rango de fechas."},
+            status_code=404
+        )
+
+    pagos = [msg for msg in rows if es_pago_movil(msg["text"])]
+
+    if len(pagos) == 0:
+        return JSONResponse(
+            {"mensaje": "No se detectaron pagos móviles en ese rango de fechas."},
+            status_code=404
+        )
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Fecha","Banco","Monto","Operacion","Mensaje","Imagen"])
+
+    for p in pagos:
+        local_path = p["local_path"] or "/app/static/soporte_pagomovil.png"
+        datos = extraer_datos_soporte(local_path)
+
+        writer.writerow([
+            datos["fecha"],
+            datos["banco"],
+            datos["monto"],
+            datos["operacion"],
+            p["text"],
+            local_path
+        ])
+
+    csv_data = output.getvalue()
+
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=pagos.csv"}
+    )
+        
