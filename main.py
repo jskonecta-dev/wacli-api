@@ -92,7 +92,7 @@ def formatear_timestamp(ts):
 STOPWORDS = {
     "hay", "el", "la", "los", "las", "que", "de", "y", "a", "un", "una",
     "en", "con", "por", "para", "se", "del", "al", "cuando", "si"
-}
+    }
 
 
 def limpiar_consulta(q: str) -> str:
@@ -252,7 +252,7 @@ def buscar_avanzado(
     metraje_min: int = Query(None),
     metraje_max: int = Query(None),
     k: int = 10
-):
+    ):
     try:
         # Embedding de la consulta
         query_emb = client.embeddings.create(
@@ -315,7 +315,7 @@ def buscar_avanzado(
 
         rows = cur.fetchall()
         conn.close()
-conn.close()
+        conn.close()
 
         # Palabras clave
         ubicaciones_keywords = [
