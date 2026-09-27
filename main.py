@@ -611,3 +611,26 @@ def debug_chat(chat: str):
 
     except Exception as e:
         return {"error": str(e)}
+
+@app.get("/debug_columns")
+def debug_columns():
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'messages'
+            ORDER BY ordinal_position;
+        """)
+
+        cols = [row[0] for row in cur.fetchall()]
+        cur.close()
+        conn.close()
+
+        return cols
+
+    except Exception as e:
+        return {"error": str(e)}
+
