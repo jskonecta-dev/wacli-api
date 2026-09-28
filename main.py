@@ -9,6 +9,7 @@ import numpy as np
 import os
 import difflib
 import re
+import codecs
 from PIL import Image
 import csv
 import io
@@ -93,18 +94,39 @@ STOPWORDS = {
     "hay", "el", "la", "los", "las", "que", "de", "y", "a", "un", "una",
     "en", "con", "por", "para", "se", "del", "al", "cuando", "si"
     }
+
+import codecs
+
 def reparar_utf8(texto):
-    try:
-        return texto.encode("latin1", errors="ignore").decode("utf8", errors="ignore")
-    except:
+    if not texto:
         return texto
 
+    try:
+        # Intento 1: reparar mojibake clásico (latin1 → utf8)
+        return texto.encode("latin1").decode("utf8")
+    except:
+        pass
 
-def limpiar_consulta(q: str) -> str:
-    tokens = q.lower().split()
-    tokens_filtrados = [t for t in tokens if t not in STOPWORDS]
-    return " ".join(tokens_filtrados)
+    try:
+        # Intento 2: reparar doble mojibake (utf8 → latin1 → utf8)
+        return codecs.decode(texto.encode("latin1", errors="ignore"), "utf-8", errors="ignore")
+    except:
+        pass
 
+    try:
+        # Intento 3: reparar UTF‑16 mal interpretado
+        return texto.encode("latin1", errors="ignore").decode("utf-16", errors="ignore")
+    except:
+        pass
+
+    try:
+        # Intento 4: reparar UTF‑8 mal interpretado como Windows-1252
+        return texto.encode("cp1252", errors="ignore").decode("utf-8", errors="ignore")
+    except:
+        pass
+
+    # Si nada funcionó, devolver el texto original
+    return texto
 
 # -----------------------------
 # BÚSQUEDA SIMPLE EN WACLI
