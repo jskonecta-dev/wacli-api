@@ -93,6 +93,11 @@ STOPWORDS = {
     "hay", "el", "la", "los", "las", "que", "de", "y", "a", "un", "una",
     "en", "con", "por", "para", "se", "del", "al", "cuando", "si"
     }
+def reparar_utf8(texto):
+    try:
+        return texto.encode("latin1", errors="ignore").decode("utf8", errors="ignore")
+    except:
+        return texto
 
 
 def limpiar_consulta(q: str) -> str:
@@ -554,7 +559,7 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
             {"mensaje": "No se encontraron mensajes para ese chat en ese rango de fechas."},
             status_code=404
         )
-
+    
     # Reparar UTF-8 de todos los mensajes
     for msg in rows:
         texto = msg.get("text")
