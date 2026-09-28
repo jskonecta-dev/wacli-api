@@ -557,8 +557,11 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
 
     # Reparar UTF-8 de todos los mensajes
     for msg in rows:
-        if msg["text"]:
-            msg["text"] = reparar_utf8(msg["text"])
+        texto = msg.get("text")
+        if texto:
+            msg["text"] = reparar_utf8(texto)
+        else:
+            msg["text"] = ""
     
     # Detectar pagos móviles
     pagos = [msg for msg in rows if es_pago_movil(msg["text"])]
