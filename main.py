@@ -555,6 +555,12 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
             status_code=404
         )
 
+    # Reparar UTF-8 de todos los mensajes
+    for msg in rows:
+        if msg["text"]:
+            msg["text"] = reparar_utf8(msg["text"])
+    
+    # Detectar pagos móviles
     pagos = [msg for msg in rows if es_pago_movil(msg["text"])]
 
     if len(pagos) == 0:
