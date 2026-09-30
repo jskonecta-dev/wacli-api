@@ -600,32 +600,62 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["Fecha","Operacion", "Telefono", "Monto"])
-
+    # no vamos a imprimir los pagos con errores, sino a indicarlos
+    errores = []
+    fechas_incompletas = []
+    pagos_incompletos = 0
+    
     for p in pagos:
         local_path = p["local_path"] or "/app/static/soporte_pagomovil.png"
         datos = extraer_datos_soporte(local_path)
-
-        # Extraer teléfono del mensaje del soporte
+    
+        # Extraer teléfono del mensaje original
         telefono = re.findall(r"\d{4}-?\d{7}", p["text"])
-        
-        writer.writerow([
-            datos["fecha"].split(" ")[0],                      # Fecha
-            datos["operacion"],                                # Operación
-            telefono[0] if telefono else "",                   # Teléfono
-            datos["monto"].replace(".", "").replace(",", ""),  # Monto
-        ])
-
-        
+        telefono = telefono[0] if telefono else ""
+    
+        # Datos del soporte
+        fecha = datos["fecha"].split(" ")[0] if datos["fecha"] else ""
+        operacion = datos["operacion"] or ""
+        monto = datos["monto"].replace(".", "").replace(",", "") if datos["monto"] else ""
+    
+        # Verificar si el registro está completo
+        if fecha and operacion and telefono and monto:
+            writer.writerow([fecha, operacion, telefono, monto])
+        else:
+            pagos_incompletos += 1
+    
+            motivo = []
+            if not fecha:
+                motivo.append("Falta fecha")
+            if not operacion:
+                motivo.append("Falta operación")
+            if not telefono:
+                motivo.append("Falta teléfono")
+            if not monto:
+                motivo.append("Monto vacío")
+    
+            errores.append({
+                "fecha": fecha or "desconocida",
+                "motivo": ", ".join(motivo)
+            })
+    
+            if fecha:
+                fechas_incompletas.append(fecha)
+    
+    # Eliminar duplicados en fechas
+    fechas_incompletas = list(set(fechas_incompletas))
+    
     csv_data = output.getvalue()
-
+    
+    resultado["pagos_incompletos"] = pagos_incompletos
+    resultado["fechas_incompletas"] = fechas_incompletas
+    resultado["errores"] = errores
+    
     return Response(
         content=csv_data,
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=pagos.csv"}
     )
-
-
-
 
 @app.get("/debug_columns")
 def debug_columns():
