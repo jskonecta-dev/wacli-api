@@ -583,10 +583,7 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
     # Reparar UTF-8 de todos los mensajes
     for msg in rows:
         texto = msg.get("text")
-        if texto:
-            msg["text"] = reparar_utf8(texto)
-        else:
-            msg["text"] = ""
+        msg["text"] = reparar_utf8(texto) if texto else ""
     
     # Detectar pagos móviles
     pagos = [msg for msg in rows if es_pago_movil(msg["text"])]
@@ -597,65 +594,37 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
             status_code=404
         )
 
+    # Crear CSV
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Fecha","Operacion", "Telefono", "Monto"])
-    # no vamos a imprimir los pagos con errores, sino a indicarlos
-    errores = []
-    fechas_incompletas = []
-    pagos_incompletos = 0
-    
+    writer.writerow(["Fecha","Operacion","Telefono","Monto"])
+
+    # Solo imprimir pagos completos
     for p in pagos:
         local_path = p["local_path"] or "/app/static/soporte_pagomovil.png"
         datos = extraer_datos_soporte(local_path)
-    
+
         # Extraer teléfono del mensaje original
         telefono = re.findall(r"\d{4}-?\d{7}", p["text"])
         telefono = telefono[0] if telefono else ""
-    
+
         # Datos del soporte
         fecha = datos["fecha"].split(" ")[0] if datos["fecha"] else ""
         operacion = datos["operacion"] or ""
         monto = datos["monto"].replace(".", "").replace(",", "") if datos["monto"] else ""
-    
-        # Verificar si el registro está completo
+
+        # Solo imprimir si está completo
         if fecha and operacion and telefono and monto:
             writer.writerow([fecha, operacion, telefono, monto])
-        else:
-            pagos_incompletos += 1
-    
-            motivo = []
-            if not fecha:
-                motivo.append("Falta fecha")
-            if not operacion:
-                motivo.append("Falta operación")
-            if not telefono:
-                motivo.append("Falta teléfono")
-            if not monto:
-                motivo.append("Monto vacío")
-    
-            errores.append({
-                "fecha": fecha or "desconocida",
-                "motivo": ", ".join(motivo)
-            })
-    
-            if fecha:
-                fechas_incompletas.append(fecha)
-    
-    # Eliminar duplicados en fechas
-    fechas_incompletas = list(set(fechas_incompletas))
-    
+
     csv_data = output.getvalue()
-    
-    resultado["pagos_incompletos"] = pagos_incompletos
-    resultado["fechas_incompletas"] = fechas_incompletas
-    resultado["errores"] = errores
-    
+
     return Response(
         content=csv_data,
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=pagos.csv"}
     )
+
 
 @app.get("/debug_columns")
 def debug_columns():
@@ -679,6 +648,130 @@ def debug_columns():
     except Exception as e:
         return {"error": str(e)}
 
+@app.get("/pagomovil_info")
+def pagomovil_info(chat: str, desde: str, hasta: str):
+
+    # Validación de fechas
+    try:
+        fecha_desde = datetime.fromisoformat(desde)
+        fecha_hasta = datetime.fromisoformat(hasta)
+    except:
+        return JSONResponse(
+            {"mensaje": "Formato de fecha inválido. Use YYYY-MM-DD."},
+            status_code=400
+        )
+
+    from_ts = int(fecha_desde.timestamp())
+    to_ts = int(fecha_hasta.timestamp())
+
+    query = """
+    SELECT 
+        message_id,
+        chat_name,
+        sender_name,
+        ts,
+        text,
+        media_type,
+        filename,
+        mime_type,
+        local_path,
+        direct_path,
+        file_length,
+        media_key,
+        file_sha256,
+        file_enc_sha256,
+        ocr_text,
+        banco,
+        monto,
+        operacion,
+        fecha_soporte
+    FROM messages
+    WHERE chat_name ILIKE %s
+    AND ts BETWEEN %s AND %s
+    ORDER BY ts ASC;
+    """
+
+    params = [f"%{chat}%", from_ts, to_ts]
+
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(query, params)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    if len(rows) == 0:
+        return JSONResponse(
+            {"mensaje": "No se encontraron mensajes para ese chat en ese rango de fechas."},
+            status_code=404
+        )
+    
+    # Reparar UTF-8 de todos los mensajes
+    for msg in rows:
+        texto = msg.get("text")
+        msg["text"] = reparar_utf8(texto) if texto else ""
+    
+    # Detectar pagos móviles
+    pagos = [msg for msg in rows if es_pago_movil(msg["text"])]
+
+    if len(pagos) == 0:
+        return JSONResponse(
+            {"mensaje": "No se detectaron pagos móviles en ese rango de fechas."},
+            status_code=404
+        )
+
+    # Auditoría
+    errores = []
+    fechas_incompletas = []
+    pagos_incompletos = 0
+    pagos_validos = 0
+
+    for p in pagos:
+        local_path = p["local_path"] or "/app/static/soporte_pagomovil.png"
+        datos = extraer_datos_soporte(local_path)
+
+        # Extraer teléfono del mensaje original
+        telefono = re.findall(r"\d{4}-?\d{7}", p["text"])
+        telefono = telefono[0] if telefono else ""
+
+        # Datos del soporte
+        fecha = datos["fecha"].split(" ")[0] if datos["fecha"] else ""
+        operacion = datos["operacion"] or ""
+        monto = datos["monto"].replace(".", "").replace(",", "") if datos["monto"] else ""
+
+        # Verificar si el registro está completo
+        if fecha and operacion and telefono and monto:
+            pagos_validos += 1
+        else:
+            pagos_incompletos += 1
+
+            motivo = []
+            if not fecha:
+                motivo.append("Falta fecha")
+            if not operacion:
+                motivo.append("Falta operación")
+            if not telefono:
+                motivo.append("Falta teléfono")
+            if not monto:
+                motivo.append("Monto vacío")
+
+            errores.append({
+                "fecha": fecha or "desconocida",
+                "motivo": ", ".join(motivo)
+            })
+
+            if fecha:
+                fechas_incompletas.append(fecha)
+
+    # Eliminar duplicados en fechas
+    fechas_incompletas = list(set(fechas_incompletas))
+
+    return {
+        "pagos_validos": pagos_validos,
+        "pagos_incompletos": pagos_incompletos,
+        "fechas_incompletas": fechas_incompletas,
+        "errores": errores
+    }
 
 @app.get("/debug_chat")
 def debug_chat(chat: str):
