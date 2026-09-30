@@ -95,8 +95,6 @@ STOPWORDS = {
     "en", "con", "por", "para", "se", "del", "al", "cuando", "si"
     }
 
-import codecs
-
 def reparar_utf8(texto):
     if not texto:
         return texto
@@ -601,21 +599,23 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Fecha","Banco","Monto","Operacion","Mensaje","Imagen"])
+    writer.writerow(["Fecha","Operacion", "Telefono", "Monto"])
 
     for p in pagos:
         local_path = p["local_path"] or "/app/static/soporte_pagomovil.png"
         datos = extraer_datos_soporte(local_path)
 
+        # Extraer teléfono del mensaje del soporte
+        telefono = re.findall(r"\d{4}-?\d{7}", p["text"])
+        
         writer.writerow([
-            datos["fecha"],
-            datos["banco"],
-            datos["monto"],
-            datos["operacion"],
-            p["text"],
-            local_path
+            datos["fecha"].split(" ")[0],                      # Fecha
+            datos["operacion"],                                # Operación
+            telefono[0] if telefono else "",                   # Teléfono
+            datos["monto"].replace(".", "").replace(",", ""),  # Monto
         ])
 
+        
     csv_data = output.getvalue()
 
     return Response(
