@@ -673,5 +673,14 @@ def debug_chat(chat: str):
     except Exception as e:
         return {"error": str(e)}
 
+@app.get("/debug_raw")
+def debug_raw(id: int):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT text FROM messages WHERE message_id = %s", (id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return {"raw": row[0]}
 
 
