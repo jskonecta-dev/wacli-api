@@ -598,7 +598,7 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["Fecha","Operacion","Telefono","Monto"])
-
+    filas_validas = 0
     # Solo imprimir pagos completos
     for p in pagos:
         local_path = p["local_path"] or "/app/static/soporte_pagomovil.png"
@@ -616,6 +616,13 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
         # Solo imprimir si está completo
         if fecha and operacion and telefono and monto:
             writer.writerow([fecha, operacion, telefono, monto])
+            filas_validas += 1
+
+    if filas_validas == 0:
+    return JSONResponse(
+        {"mensaje": "No se generó el CSV porque no se encontraron datos completos para el rango de fechas especificado."},
+        status_code=404
+    )
 
     csv_data = output.getvalue()
 
