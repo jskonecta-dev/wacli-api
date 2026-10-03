@@ -623,6 +623,13 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
                 {"mensaje": "No se generó el CSV porque no se encontraron datos completos para el rango de fechas especificado."},
                 status_code=404
             )
+        
+        writer.writerow([])
+        writer.writerow(["ERRORES DETECTADOS"])
+        writer.writerow(["Fecha", "Motivo"])
+        for err in errores:
+            writer.writerow([err["fecha"], err["motivo"]])
+
 
         csv_data = output.getvalue()
     
