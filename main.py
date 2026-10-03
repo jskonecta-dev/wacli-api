@@ -736,22 +736,18 @@ def pagomovil_info(chat: str, desde: str, hasta: str):
     for p in pagos:
         local_path = p["local_path"] or "/app/static/soporte_pagomovil.png"
         datos = extraer_datos_soporte(local_path)
-
         # Extraer teléfono del mensaje original
         telefono = re.findall(r"\d{4}-?\d{7}", p["text"])
         telefono = telefono[0] if telefono else ""
-
         # Datos del soporte
         fecha = datos["fecha"].split(" ")[0] if datos["fecha"] else ""
         operacion = datos["operacion"] or ""
         monto = datos["monto"].replace(".", "").replace(",", "") if datos["monto"] else ""
-
         # Verificar si el registro está completo
         if fecha and operacion and telefono and monto:
             pagos_validos += 1
         else:
             pagos_incompletos += 1
-
             motivo = []
             if not fecha:
                 motivo.append("Falta fecha")
@@ -761,24 +757,21 @@ def pagomovil_info(chat: str, desde: str, hasta: str):
                 motivo.append("Falta teléfono")
             if not monto:
                 motivo.append("Monto vacío")
-
             errores.append({
                 "fecha": fecha or "desconocida",
                 "motivo": ", ".join(motivo)
             })
-
             if fecha:
                 fechas_incompletas.append(fecha)
-
-    # Eliminar duplicados en fechas
-    fechas_incompletas = list(set(fechas_incompletas))
-
-    return {
-        "pagos_validos": pagos_validos,
-        "pagos_incompletos": pagos_incompletos,
-        "fechas_incompletas": fechas_incompletas,
-        "errores": errores
-    }
+        # Eliminar duplicados en fechas
+        fechas_incompletas = list(set(fechas_incompletas))
+    
+        return {
+            "pagos_validos": pagos_validos,
+            "pagos_incompletos": pagos_incompletos,
+            "fechas_incompletas": fechas_incompletas,
+            "errores": errores
+        }
 
 @app.get("/debug_chat")
 def debug_chat(chat: str):
