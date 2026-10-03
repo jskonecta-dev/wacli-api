@@ -624,13 +624,13 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
             status_code=404
         )
 
-    csv_data = output.getvalue()
-
-    return Response(
-        content=csv_data,
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=pagos.csv"}
-    )
+        csv_data = output.getvalue()
+    
+        return Response(
+            content=csv_data,
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=pagos.csv"}
+        )
 
 
 @app.get("/debug_columns")
