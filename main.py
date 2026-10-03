@@ -618,11 +618,11 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
             writer.writerow([fecha, operacion, telefono, monto])
             filas_validas += 1
 
-    if filas_validas == 0:
-    return JSONResponse(
-        {"mensaje": "No se generó el CSV porque no se encontraron datos completos para el rango de fechas especificado."},
-        status_code=404
-    )
+        if filas_validas == 0:
+        return JSONResponse(
+            {"mensaje": "No se generó el CSV porque no se encontraron datos completos para el rango de fechas especificado."},
+            status_code=404
+        )
 
     csv_data = output.getvalue()
 
