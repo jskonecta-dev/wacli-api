@@ -535,11 +535,15 @@ def es_pago_movil(texto: str):
 
     texto = texto.lower()
     claves = [
-        "pago movil", "pago móvil", "pago mov", "pago movi",
-        "pago", "movil", "móvil", "pm",
-        "bancamiga", "venezuela", "banesco", "provincial", "mercantil", 
-        "pago por", "pago listo", "pago hecho"
+        "pago", "pago movil", "pago móvil", "pago mov", "pago movi", "pago movl",
+        "movil", "móvil", "pm",
+        "bdv", "banesco", "bancamiga", "provincial", "mercantil", "venezuela",
+        "transferencia", "transferi", "transferí", "transferido",
+        "te envié", "te envie", "te mandé", "te mande", "te paso",
+        "servicios", "pago por", "pago por servicios",
+        "pago listo", "pago hecho", "ahí va", "ahi va", "ahí está", "ahi esta"
     ]
+
     return any(c in texto for c in claves)
 
 
