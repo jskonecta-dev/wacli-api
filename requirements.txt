@@ -4,3 +4,4 @@ openai
 numpy
 psycopg2-binary
 Pillow
+python-multipart
