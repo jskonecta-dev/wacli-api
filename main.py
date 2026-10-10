@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, Query
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, UploadFile, File
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
@@ -46,7 +47,45 @@ def get_conn():
         sslmode="require"
     )
 
+# Detectar y procesar captures de pagos movil
 
+@app.post("/pagomovil_ocr")
+async def pagomovil_ocr(imagen: UploadFile = File(...)):
+    # Leer bytes de la imagen
+    contenido = await imagen.read()
+
+    # Llamar a OpenAI Vision
+    respuesta = openai.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "input_image", "image": contenido},
+                    {"type": "text", "text": "Extrae fecha, monto, banco y referencia del pago móvil."}
+                ]
+            }
+        ]
+    )
+    texto = respuesta.choices[0].message["content"]
+    # Procesar texto OCR
+    resultado = parsear_ocr(texto)
+    return resultado
+
+
+def parsear_ocr(texto):
+    fecha = re.search(r"(\d{2}/\d{2}/\d{4})", texto)
+    monto = re.search(r"([\d\.]+,\d{2})", texto)
+    banco = re.search(r"(Banesco|BDV|Bancamiga|Banco de Venezuela)", texto, re.IGNORECASE)
+    referencia = re.search(r"(\d{6,12})", texto)
+
+    return {
+        "fecha": fecha.group(1) if fecha else "no detectado",
+        "monto": monto.group(1) if monto else "no detectado",
+        "banco": banco.group(1) if banco else "no detectado",
+        "referencia": referencia.group(1) if referencia else "no detectado",
+        "motivo": "Pago móvil detectado por OCR"
+    }
 # -----------------------------
 # FUZZY MATCHING GENERAL
 # -----------------------------
@@ -499,7 +538,7 @@ def es_pago_movil(texto: str):
     claves = [
         "pago movil", "pago móvil", "pago mov", "pago movi",
         "pago", "movil", "móvil", "pm",
-        "bancamiga", "venezuela", "banesco", "provincial",
+        "bancamiga", "venezuela", "banesco", "provincial", "mercantil", 
         "pago por", "pago listo", "pago hecho"
     ]
     return any(c in texto for c in claves)
@@ -518,7 +557,25 @@ def extraer_datos_soporte(local_path):
         "imagen": local_path
     }
 
-
+# OCR VERDADERO PARA SOPORTE
+@app.post("/pagomovil_ocr")
+async def pagomovil_ocr(imagen: UploadFile = File(...)):
+    contenido = await imagen.read()
+    respuesta = openai.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "input_image", "image": contenido},
+                    {"type": "text", "text": "Extrae fecha, monto, banco, referencia y concepto del pago móvil."}
+                ]
+            }
+        ]
+    )
+    texto = respuesta.choices[0].message["content"]
+    datos = parsear_ocr(texto)
+    return datos
 # -----------------------------
 # ENDPOINT PAGO MÓVIL -> CSV
 # -----------------------------
