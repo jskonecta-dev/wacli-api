@@ -21,7 +21,6 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-
 # -----------------------------
 # MIDDLEWARE NO CACHE
 # -----------------------------
