@@ -840,6 +840,70 @@ def pagomovil_info(chat: str, desde: str, hasta: str):
             "errores": errores
         }
 
+# endpoint para actuar con OCR y producir cvs para un chat y entre fechas
+
+@app.get("/mensajes_chat")
+def mensajes_chat(chat: str, desde: str, hasta: str):
+
+    # Validación de fechas
+    try:
+        fecha_desde = datetime.fromisoformat(desde)
+        fecha_hasta = datetime.fromisoformat(hasta)
+    except:
+        return JSONResponse(
+            {"mensaje": "Formato de fecha inválido. Use YYYY-MM-DD."},
+            status_code=400
+        )
+
+    from_ts = int(fecha_desde.timestamp())
+    to_ts = int(fecha_hasta.timestamp())
+
+    query = """
+    SELECT 
+        message_id,
+        chat_name,
+        sender_name,
+        ts,
+        text,
+        media_type,
+        filename,
+        mime_type,
+        local_path,
+        direct_path,
+        file_length,
+        media_key,
+        file_sha256,
+        file_enc_sha256,
+        ocr_text,
+        banco,
+        monto,
+        operacion,
+        fecha_soporte
+    FROM messages
+    WHERE chat_name ILIKE %s
+    AND ts BETWEEN %s AND %s
+    ORDER BY ts ASC;
+    """
+
+    params = [f"%{chat}%", from_ts, to_ts]
+
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(query, params)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    # Reparar UTF-8
+    for msg in rows:
+        texto = msg.get("text")
+        msg["text"] = reparar_utf8(texto) if texto else ""
+
+    return rows
+
+
+
+
 @app.get("/debug_chat")
 def debug_chat(chat: str):
     try:
