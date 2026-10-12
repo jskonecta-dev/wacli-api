@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request, Query
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi import FastAPI, UploadFile, File
+from pydantic import BaseModel
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
@@ -31,8 +32,11 @@ async def no_cache_middleware(request: Request, call_next):
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
-
-
+# para metodo post
+class FiltroAuditoria(BaseModel):
+    chat: str
+    desde: str
+    hasta: str
 # -----------------------------
 # CONEXIÓN A NEON
 # -----------------------------
@@ -45,6 +49,7 @@ def get_conn():
         port=os.getenv("PGPORT"),
         sslmode="require"
     )
+
 
 # Detectar y procesar captures de pagos movil
 
@@ -906,6 +911,33 @@ def mensajes_chat(chat: str, desde: str, hasta: str):
 
     return rows
 
+# metodo POST
+@app.post("/mensajes_chat_post")
+def mensajes_chat_post(filtro: FiltroAuditoria):
+    chat = filtro.chat
+    desde = filtro.desde
+    hasta = filtro.hasta
+
+    print(">>> POST recibido:", filtro)
+
+    # Limpieza básica
+    desde = desde.strip()
+    hasta = hasta.strip()
+
+    # Convertir fechas
+    fecha_desde = datetime.fromisoformat(desde)
+    fecha_hasta = datetime.fromisoformat(hasta)
+
+    from_ts = int(fecha_desde.timestamp() * 1000)
+    to_ts = int(fecha_hasta.timestamp() * 1000)
+
+    # Filtrar mensajes
+    mensajes_filtrados = [
+        m for m in mensajes
+        if m["chat_name"] == chat and from_ts <= m["ts"] <= to_ts
+    ]
+
+    return mensajes_filtrados
 
 
 
