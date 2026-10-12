@@ -844,6 +844,11 @@ def pagomovil_info(chat: str, desde: str, hasta: str):
 
 @app.get("/mensajes_chat")
 def mensajes_chat(chat: str, desde: str, hasta: str):
+    print(">>> desde crudo:", repr(desde))
+    # LIMPIEZA BÁSICA
+    desde = desde.strip()
+
+    print(">>> desde limpio:", repr(desde))
 
     # Validación de fechas
     try:
