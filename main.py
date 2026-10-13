@@ -918,6 +918,10 @@ def mensajes_chat_post(filtro: FiltroAuditoria = Body(...)):
     print(">>> POST recibido:", filtro)
 
     try:
+        # Convertir fechas ISO a timestamp UNIX
+        ts_desde = int(datetime.fromisoformat(filtro.desde).timestamp())
+        ts_hasta = int(datetime.fromisoformat(filtro.hasta).timestamp())
+
         conn = get_conn()
         cur = conn.cursor()
 
@@ -927,7 +931,7 @@ def mensajes_chat_post(filtro: FiltroAuditoria = Body(...)):
             WHERE chat_name = %s
               AND ts BETWEEN %s AND %s
             ORDER BY ts ASC;
-        """, (filtro.chat, filtro.desde, filtro.hasta))
+        """, (filtro.chat, ts_desde, ts_hasta))
 
         rows = cur.fetchall()
 
@@ -935,8 +939,8 @@ def mensajes_chat_post(filtro: FiltroAuditoria = Body(...)):
         for row in rows:
             mensajes.append({
                 "chat": row[0],
-                "fecha": row[1],     # ts → timestamp
-                "mensaje": row[2]    # text → contenido del mensaje
+                "fecha": row[1],
+                "mensaje": row[2]
             })
 
         cur.close()
@@ -947,6 +951,7 @@ def mensajes_chat_post(filtro: FiltroAuditoria = Body(...)):
     except Exception as e:
         print(">>> ERROR interno:", e)
         return {"resultados": "Internal"}
+
 
 
 
