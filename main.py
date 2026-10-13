@@ -2,12 +2,14 @@ from fastapi import FastAPI, Request, Query
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi import FastAPI, UploadFile, File
+from fastapi import Body
 from pydantic import BaseModel
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
 from openai import OpenAI
 import numpy as np
+from typing import Annotated
 import os
 import difflib
 import re
@@ -913,7 +915,7 @@ def mensajes_chat(chat: str, desde: str, hasta: str):
 
 # metodo POST
 @app.post("/mensajes_chat_post")
-def mensajes_chat_post(filtro: Filtro):
+def mensajes_chat_post(filtro: Annotated[Filtro, Body()]):
     print(">>> POST recibido:", filtro)
 
     try:
