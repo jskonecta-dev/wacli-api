@@ -915,7 +915,7 @@ def mensajes_chat(chat: str, desde: str, hasta: str):
 
 # metodo POST
 @app.post("/mensajes_chat_post")
-def mensajes_chat_post(filtro: Annotated[Filtro, Body()]):
+def mensajes_chat_post(filtro: Filtro = Body(...)):
     print(">>> POST recibido:", filtro)
 
     try:
@@ -932,7 +932,6 @@ def mensajes_chat_post(filtro: Annotated[Filtro, Body()]):
 
         rows = cur.fetchall()
 
-        # Convertir filas a lista de diccionarios
         mensajes = []
         for row in rows:
             mensajes.append({
@@ -949,6 +948,7 @@ def mensajes_chat_post(filtro: Annotated[Filtro, Body()]):
     except Exception as e:
         print(">>> ERROR interno:", e)
         return {"resultados": "Internal"}
+
 
 @app.get("/debug_chat")
 def debug_chat(chat: str):
