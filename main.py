@@ -939,8 +939,8 @@ def mensajes_chat_post(filtro: FiltroAuditoria = Body(...)):
         for row in rows:
             mensajes.append({
                 "chat": row[0],
-                "fecha": row[1],
-                "mensaje": row[2]
+                "fecha": row[1],     # ts
+                "mensaje": row[2]    # text
             })
 
         cur.close()
@@ -951,7 +951,6 @@ def mensajes_chat_post(filtro: FiltroAuditoria = Body(...)):
     except Exception as e:
         print(">>> ERROR interno:", e)
         return {"resultados": "Internal"}
-
 
 
 
