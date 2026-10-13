@@ -9,7 +9,6 @@ from psycopg2.extras import RealDictCursor
 from datetime import datetime
 from openai import OpenAI
 import numpy as np
-from typing import Annotated
 import os
 import difflib
 import re
@@ -915,7 +914,7 @@ def mensajes_chat(chat: str, desde: str, hasta: str):
 
 # metodo POST
 @app.post("/mensajes_chat_post")
-def mensajes_chat_post(filtro: Filtro = Body(...)):
+def mensajes_chat_post(filtro: FiltroAuditoria = Body(...)):
     print(">>> POST recibido:", filtro)
 
     try:
@@ -948,6 +947,7 @@ def mensajes_chat_post(filtro: Filtro = Body(...)):
     except Exception as e:
         print(">>> ERROR interno:", e)
         return {"resultados": "Internal"}
+
 
 
 @app.get("/debug_chat")
