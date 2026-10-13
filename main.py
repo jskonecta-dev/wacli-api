@@ -913,33 +913,40 @@ def mensajes_chat(chat: str, desde: str, hasta: str):
 
 # metodo POST
 @app.post("/mensajes_chat_post")
-def mensajes_chat_post(filtro: FiltroAuditoria):
-    chat = filtro.chat
-    desde = filtro.desde
-    hasta = filtro.hasta
-
+def mensajes_chat_post(filtro: Filtro):
     print(">>> POST recibido:", filtro)
 
-    # Limpieza básica
-    desde = desde.strip()
-    hasta = hasta.strip()
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
 
-    # Convertir fechas
-    fecha_desde = datetime.fromisoformat(desde)
-    fecha_hasta = datetime.fromisoformat(hasta)
+        cur.execute("""
+            SELECT chat_name, fecha, mensaje
+            FROM mensajes
+            WHERE chat_name = %s
+              AND fecha BETWEEN %s AND %s
+            ORDER BY fecha ASC;
+        """, (filtro.chat, filtro.desde, filtro.hasta))
 
-    from_ts = int(fecha_desde.timestamp() * 1000)
-    to_ts = int(fecha_hasta.timestamp() * 1000)
+        rows = cur.fetchall()
 
-    # Filtrar mensajes
-    mensajes_filtrados = [
-        m for m in mensajes
-        if m["chat_name"] == chat and from_ts <= m["ts"] <= to_ts
-    ]
+        # Convertir filas a lista de diccionarios
+        mensajes = []
+        for row in rows:
+            mensajes.append({
+                "chat": row[0],
+                "fecha": row[1],
+                "mensaje": row[2]
+            })
 
-    return mensajes_filtrados
+        cur.close()
+        conn.close()
 
+        return {"resultados": mensajes}
 
+    except Exception as e:
+        print(">>> ERROR interno:", e)
+        return {"resultados": "Internal"}
 
 @app.get("/debug_chat")
 def debug_chat(chat: str):
