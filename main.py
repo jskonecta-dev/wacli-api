@@ -922,11 +922,11 @@ def mensajes_chat_post(filtro: FiltroAuditoria = Body(...)):
         cur = conn.cursor()
 
         cur.execute("""
-            SELECT chat_name, fecha, mensaje
-            FROM mensajes
+            SELECT chat_name, ts, text
+            FROM messages
             WHERE chat_name = %s
-              AND fecha BETWEEN %s AND %s
-            ORDER BY fecha ASC;
+              AND ts BETWEEN %s AND %s
+            ORDER BY ts ASC;
         """, (filtro.chat, filtro.desde, filtro.hasta))
 
         rows = cur.fetchall()
@@ -935,8 +935,8 @@ def mensajes_chat_post(filtro: FiltroAuditoria = Body(...)):
         for row in rows:
             mensajes.append({
                 "chat": row[0],
-                "fecha": row[1],
-                "mensaje": row[2]
+                "fecha": row[1],     # ts → timestamp
+                "mensaje": row[2]    # text → contenido del mensaje
             })
 
         cur.close()
