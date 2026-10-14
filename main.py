@@ -377,7 +377,7 @@ def buscar_avanzado(
             input=q
         ).data[0].embedding
 
-        query_str = "[" + ",".join(str(x) for x) for x in query_emb) + "]"
+        query_str = "[" + ",".join(str(x) for x in query_emb) + "]"
 
         conn = get_conn()
         cur = conn.cursor()
