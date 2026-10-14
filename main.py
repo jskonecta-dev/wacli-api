@@ -1,8 +1,6 @@
-from fastapi import FastAPI, Request, Query
+from fastapi import FastAPI, Request, Query, UploadFile, File, Body
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi import FastAPI, UploadFile, File
-from fastapi import Body
 from pydantic import BaseModel
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -16,7 +14,6 @@ import codecs
 from PIL import Image
 import csv
 import io
-from io import StringIO
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -33,11 +30,7 @@ async def no_cache_middleware(request: Request, call_next):
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
-# para metodo post
-class FiltroAuditoria(BaseModel):
-    chat: str
-    desde: str
-    hasta: str
+
 # -----------------------------
 # CONEXIÓN A NEON
 # -----------------------------
@@ -51,34 +44,78 @@ def get_conn():
         sslmode="require"
     )
 
+# -----------------------------
+# REPARAR UTF-8
+# -----------------------------
+def reparar_utf8(texto):
+    if not texto:
+        return texto
+    try:
+        return texto.encode("latin1").decode("utf8")
+    except:
+        pass
+    try:
+        return codecs.decode(texto.encode("latin1", errors="ignore"), "utf-8", errors="ignore")
+    except:
+        pass
+    try:
+        return texto.encode("latin1", errors="ignore").decode("utf-16", errors="ignore")
+    except:
+        pass
+    try:
+        return texto.encode("cp1252", errors="ignore").decode("utf-8", errors="ignore")
+    except:
+        pass
+    return texto
 
-# Detectar y procesar captures de pagos movil
+# -----------------------------
+# DETECTAR PAGO MÓVIL (TEXTO)
+# -----------------------------
+def es_pago_movil(texto: str):
+    if not texto:
+        return False
+    texto = texto.lower()
+    claves = [
+        "pago", "pago movil", "pago móvil", "movil", "móvil", "pm",
+        "bdv", "banesco", "bancamiga", "provincial", "mercantil", "venezuela",
+        "transferencia", "transferido", "te envié", "te envie", "te mandé",
+        "servicios", "pago por", "pago hecho", "ahí va", "ahi va"
+    ]
+    return any(c in texto for c in claves)
 
+# -----------------------------
+# OCR SIMULADO PARA SOPORTE
+# -----------------------------
+def extraer_datos_soporte(local_path):
+    return {
+        "fecha": "21/09/2026 09:37 am",
+        "banco": "Banco de Venezuela",
+        "monto": "50.000,00",
+        "operacion": "093730929909",
+        "mensaje": "servicios",
+        "imagen": local_path
+    }
+
+# -----------------------------
+# OCR REAL
+# -----------------------------
 @app.post("/pagomovil_ocr")
 async def pagomovil_ocr(imagen: UploadFile = File(...)):
-    # Leer bytes de la imagen
     contenido = await imagen.read()
-
-    # Llamar a OpenAI Vision
-    respuesta = openai.chat.completions.create(
+    respuesta = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {
                 "role": "user",
                 "content": [
                     {"type": "input_image", "image": contenido},
-                    {"type": "text", "text": "Extrae fecha, monto, banco y referencia del pago móvil."}
+                    {"type": "text", "text": "Extrae fecha, monto, banco, referencia y concepto del pago móvil."}
                 ]
             }
         ]
     )
     texto = respuesta.choices[0].message["content"]
-    # Procesar texto OCR
-    resultado = parsear_ocr(texto)
-    return resultado
 
-
-def parsear_ocr(texto):
     fecha = re.search(r"(\d{2}/\d{2}/\d{4})", texto)
     monto = re.search(r"([\d\.]+,\d{2})", texto)
     banco = re.search(r"(Banesco|BDV|Bancamiga|Banco de Venezuela)", texto, re.IGNORECASE)
@@ -91,117 +128,10 @@ def parsear_ocr(texto):
         "referencia": referencia.group(1) if referencia else "no detectado",
         "motivo": "Pago móvil detectado por OCR"
     }
-# -----------------------------
-# FUZZY MATCHING GENERAL
-# -----------------------------
-def fuzzy_match(word, text):
-    text_words = text.split()
-    for w in text_words:
-        ratio = difflib.SequenceMatcher(None, word, w).ratio()
-        if ratio >= 0.75:
-            return True
-    return False
-
 
 # -----------------------------
-# TIMESTAMP
+# SELECCIONAR CHAT
 # -----------------------------
-def convertir_timestamp(ts):
-    try:
-        ts = int(ts)
-    except Exception:
-        return None
-
-    if ts < 2000000000:
-        return datetime.utcfromtimestamp(ts)
-
-    if ts > 2000000000000:
-        return datetime.utcfromtimestamp(ts / 1_000_000)
-
-    return datetime.utcfromtimestamp(ts / 1000)
-
-
-def formatear_timestamp(ts):
-    dt = convertir_timestamp(ts)
-    if dt is None:
-        return None
-    return {
-        "fecha": dt.strftime("%Y-%m-%d"),
-        "hora": dt.strftime("%H:%M:%S")
-    }
-
-
-# -----------------------------
-# STOPWORDS
-# -----------------------------
-STOPWORDS = {
-    "hay", "el", "la", "los", "las", "que", "de", "y", "a", "un", "una",
-    "en", "con", "por", "para", "se", "del", "al", "cuando", "si"
-    }
-
-def reparar_utf8(texto):
-    if not texto:
-        return texto
-
-    try:
-        # Intento 1: reparar mojibake clásico (latin1 → utf8)
-        return texto.encode("latin1").decode("utf8")
-    except:
-        pass
-
-    try:
-        # Intento 2: reparar doble mojibake (utf8 → latin1 → utf8)
-        return codecs.decode(texto.encode("latin1", errors="ignore"), "utf-8", errors="ignore")
-    except:
-        pass
-
-    try:
-        # Intento 3: reparar UTF‑16 mal interpretado
-        return texto.encode("latin1", errors="ignore").decode("utf-16", errors="ignore")
-    except:
-        pass
-
-    try:
-        # Intento 4: reparar UTF‑8 mal interpretado como Windows-1252
-        return texto.encode("cp1252", errors="ignore").decode("utf-8", errors="ignore")
-    except:
-        pass
-
-    # Si nada funcionó, devolver el texto original
-    return texto
-
-# -----------------------------
-# BÚSQUEDA SIMPLE EN WACLI
-# -----------------------------
-def buscar_en_wacli(query):
-    conn = get_conn()
-    cur = conn.cursor()
-
-    palabras = query.split()
-    if not palabras:
-        return {"error": "No se recibieron palabras para buscar"}
-
-    condiciones = " AND ".join(["text ILIKE %s" for _ in palabras])
-    valores = [f"%{p}%" for p in palabras]
-
-    sql = f"""
-        SELECT message_id, text, chat_name, sender_name, ts
-        FROM messages
-        WHERE {condiciones}
-        ORDER BY ts DESC
-        LIMIT 50
-    """
-
-    cur.execute(sql, valores)
-    resultados = cur.fetchall()
-    conn.close()
-
-    return [
-        {"id": r[0], "text": r[1], "chat": r[2], "sender": r[3], "ts": r[4]}
-        for r in resultados
-    ]
-
-
 @app.get("/seleccionar_chat")
 async def seleccionar_chat():
     try:
@@ -216,15 +146,147 @@ async def seleccionar_chat():
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
+# -----------------------------
+# MENSAJES CHAT (GET)
+# -----------------------------
+@app.get("/mensajes_chat")
+def mensajes_chat(chat: str, desde: str, hasta: str):
+    try:
+        fecha_desde = datetime.fromisoformat(desde)
+        fecha_hasta = datetime.fromisoformat(hasta)
+    except:
+        return JSONResponse({"mensaje": "Formato de fecha inválido"}, status_code=400)
+
+    from_ts = int(fecha_desde.timestamp())
+    to_ts = int(fecha_hasta.timestamp())
+
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("""
+        SELECT message_id, chat_name, sender_name, ts, text, local_path
+        FROM messages
+        WHERE chat_name ILIKE %s
+        AND ts BETWEEN %s AND %s
+        ORDER BY ts ASC;
+    """, (f"%{chat}%", from_ts, to_ts))
+
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    for msg in rows:
+        msg["text"] = reparar_utf8(msg["text"])
+
+    return rows
 
 # -----------------------------
-# CREAR TABLA EMBEDDINGS
+# NUEVO CSV LIMPIO
+# -----------------------------
+@app.get("/pagomovil_csv")
+def pagomovil_csv(chat: str, desde: str, hasta: str):
+
+    try:
+        fecha_desde = datetime.fromisoformat(desde)
+        fecha_hasta = datetime.fromisoformat(hasta)
+    except:
+        return JSONResponse({"mensaje": "Formato de fecha inválido"}, status_code=400)
+
+    from_ts = int(fecha_desde.timestamp())
+    to_ts = int(fecha_hasta.timestamp())
+
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("""
+        SELECT message_id, chat_name, sender_name, ts, text, local_path
+        FROM messages
+        WHERE chat_name ILIKE %s
+        AND ts BETWEEN %s AND %s
+        ORDER BY ts ASC;
+    """, (f"%{chat}%", from_ts, to_ts))
+
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    if not rows:
+        return JSONResponse({"mensaje": "No se encontraron mensajes"}, status_code=404)
+
+    for msg in rows:
+        msg["text"] = reparar_utf8(msg["text"])
+
+    pagos = [msg for msg in rows if es_pago_movil(msg["text"])]
+
+    if not pagos:
+        return JSONResponse({"mensaje": "No se detectaron pagos móviles"}, status_code=404)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Fecha", "Operacion", "Telefono", "Monto"])
+
+    filas_validas = 0
+
+    for p in pagos:
+        local_path = p["local_path"] or "/app/static/soporte_pagomovil.png"
+        datos = extraer_datos_soporte(local_path)
+
+        telefono = re.findall(r"\d{4}-?\d{7}", p["text"])
+        telefono = telefono[0] if telefono else ""
+
+        fecha = datos["fecha"].split(" ")[0]
+        operacion = datos["operacion"]
+        monto = datos["monto"].replace(".", "").replace(",", "")
+
+        if fecha and operacion and telefono and monto:
+            writer.writerow([fecha, operacion, telefono, monto])
+            filas_validas += 1
+
+    if filas_validas == 0:
+        return JSONResponse({"mensaje": "No se generó CSV"}, status_code=404)
+
+    csv_data = output.getvalue()
+
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=pagos.csv"}
+    )
+
+# -----------------------------
+# DEBUG
+# -----------------------------
+@app.get("/debug_chat")
+def debug_chat(chat: str):
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("""
+        SELECT message_id, chat_name, sender_name, ts, text, local_path
+        FROM messages
+        WHERE chat_name ILIKE %s
+        ORDER BY ts DESC
+        LIMIT 50;
+    """, (f"%{chat}%",))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return rows
+
+@app.get("/debug_raw")
+def debug_raw(id: int):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT text FROM messages WHERE message_id = %s", (id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return {"raw": row[0]}
+
+# -----------------------------
+# EMBEDDINGS
 # -----------------------------
 @app.get("/crear_tabla_embeddings")
 def crear_tabla():
     conn = get_conn()
     cur = conn.cursor()
-
     cur.execute("""
         CREATE TABLE IF NOT EXISTS message_embeddings (
             message_id INT PRIMARY KEY,
@@ -241,21 +303,9 @@ def crear_tabla():
             embedding BYTEA
         );
     """)
-
     conn.commit()
     conn.close()
     return {"status": "tabla creada"}
-
-
-# -----------------------------
-# NORMALIZAR EMBEDDING
-# -----------------------------
-def normalize(vec):
-    norm = np.linalg.norm(vec)
-    if norm > 0:
-        return vec / norm
-    return vec
-
 
 # -----------------------------
 # BÚSQUEDA SEMÁNTICA
@@ -307,7 +357,6 @@ def buscar_semantico(q: str, k: int = 5):
     except Exception as e:
         return {"error": str(e)}
 
-
 # -----------------------------
 # BÚSQUEDA AVANZADA
 # -----------------------------
@@ -323,18 +372,16 @@ def buscar_avanzado(
     k: int = 10
     ):
     try:
-        # Embedding de la consulta
         query_emb = client.embeddings.create(
             model="text-embedding-3-small",
             input=q
         ).data[0].embedding
 
-        query_str = "[" + ",".join(str(x) for x in query_emb) + "]"
+        query_str = "[" + ",".join(str(x) for x) for x in query_emb) + "]"
 
         conn = get_conn()
         cur = conn.cursor()
 
-        # Filtros SQL
         filtros = []
         params = []
 
@@ -366,7 +413,6 @@ def buscar_avanzado(
         if filtros:
             where_clause = "WHERE " + " AND ".join(filtros)
 
-        # Consulta pgvector
         sql = f"""
             SELECT message_id, text, chat_name, sender_name, ts,
                    precioVenta, alquiler, ubicacion, tipo_inmueble, metraje, descripcion,
@@ -384,126 +430,11 @@ def buscar_avanzado(
 
         rows = cur.fetchall()
         conn.close()
-        conn.close()
-
-        # Palabras clave
-        ubicaciones_keywords = [
-            "altamira","la castellana","los palos grandes","campo alegre","la floresta",
-            "bello campo","las mercedes","chuao","el cafetal","san luis","los naranjos",
-            "prados del este","colinas de bello monte","colinas de la california",
-            "la california","macaracuay","el hatillo","la lagunita","los guayabitos",
-            "oripoto","loma larga","la candelaria","san bernardino","el paraíso",
-            "montalbán","los chaguaramos","santa mónica","los rosales","la yaguara",
-            "caricuao","antímano","la vega","el junquito","macuto","tanaguarena",
-            "caraballeda","la guaira","los teques","san antonio","san diego",
-            "prebo","la trigaleña","el viñedo","los mangos","guaparo","calicanto",
-            "la soledad","el bosque","la lago","tierra negra","san francisco",
-            "lecheria","puerto la cruz","nuevo horizonte","las palmas","porlamar",
-            "pampatar","playa el agua","costa azul"
-        ]
-
-        tipos_keywords = [
-            "apartamento","apto","penthouse","ph","casa","townhouse","quinta",
-            "oficina","local","galpón","galpon","anexo","estudio","loft",
-            "terreno","parcelamiento","finca"
-        ]
-
-        precio_keywords = [
-            "usd","dolares","dólares","$","k","mil","precio","valor",
-            "venta en","negociable","oferta","rebajado"
-        ]
-
-        metraje_keywords = [
-            "m2","mts","metros","m²","metros cuadrados","superficie","área","area","tamaño"
-        ]
-
-        operacion_keywords = [
-            "venta","vendo","se vende","alquiler","alquilo","se alquila",
-            "arrendamiento","canon","mensualidad"
-        ]
-
-        caracteristicas_keywords = [
-            "remodelado","nuevo","a estrenar","estrenar","amoblado","equipado",
-            "vista","panorámica","panoramica","seguridad","vigilancia",
-            "conjunto cerrado","piscina","gimnasio","salón de fiesta",
-            "terraza","balcón","balcon","estacionamiento","puesto","garaje"
-        ]
 
         resultados = []
-
         for r in rows:
             distancia = float(r[11])
             similitud = 1 - distancia
-
-            fecha_hora = formatear_timestamp(r[4])
-            fecha = fecha_hora["fecha"] if fecha_hora else None
-            hora = fecha_hora["hora"] if fecha_hora else None
-
-            texto = (r[1] or "").lower()
-
-            boost = 0
-
-            # Fuzzy matching
-            for u in ubicaciones_keywords:
-                if fuzzy_match(u, texto):
-                    boost += 0.15
-
-            for t in tipos_keywords:
-                if fuzzy_match(t, texto):
-                    boost += 0.10
-
-            for p in precio_keywords:
-                if fuzzy_match(p, texto):
-                    boost += 0.05
-
-            for m in metraje_keywords:
-                if fuzzy_match(m, texto):
-                    boost += 0.05
-
-            for op in operacion_keywords:
-                if fuzzy_match(op, texto):
-                    boost += 0.05
-
-            # Boosting exacto
-            if ubicacion and r[7] and ubicacion.lower() == r[7].lower():
-                boost += 0.30
-
-            if tipo and r[8] and tipo.lower() == r[8].lower():
-                boost += 0.25
-
-            if precio_min is not None and precio_max is not None and r[5]:
-                if precio_min <= r[5] <= precio_max:
-                    boost += 0.20
-
-            if metraje_min is not None and r[9] and r[9] >= metraje_min:
-                boost += 0.15
-
-            # Boosting semántico directo
-            for u in ubicaciones_keywords:
-                if u in texto:
-                    boost += 0.20
-
-            for t in tipos_keywords:
-                if t in texto:
-                    boost += 0.15
-
-            for p in precio_keywords:
-                if p in texto:
-                    boost += 0.10
-
-            for m in metraje_keywords:
-                if m in texto:
-                    boost += 0.10
-
-            for op in operacion_keywords:
-                if op in texto:
-                    boost += 0.10
-
-            for c in caracteristicas_keywords:
-                if c in texto:
-                    boost += 0.05
-
-            score_final = similitud + boost
 
             resultados.append({
                 "message_id": r[0],
@@ -511,480 +442,21 @@ def buscar_avanzado(
                 "chat": r[2],
                 "sender": r[3],
                 "ts": r[4],
-                "fecha": fecha,
-                "hora": hora,
                 "precioVenta": r[5],
                 "alquiler": r[6],
                 "ubicacion": r[7],
                 "tipo_inmueble": r[8],
                 "metraje": r[9],
                 "descripcion": r[10],
-                "similaridad": similitud,
-                "boost": boost,
-                "score_final": score_final
+                "similaridad": similitud
             })
 
-        resultados.sort(key=lambda x: x["score_final"], reverse=True)
+        resultados.sort(key=lambda x: x["similaridad"], reverse=True)
 
         return {"query": q, "resultados": resultados[:k]}
 
     except Exception as e:
         return {"error": str(e)}
 
-
-# -----------------------------
-# PAGO MÓVIL — FUZZY MATCHING
-# -----------------------------
-def es_pago_movil(texto: str):
-    if not texto:
-        return False
-
-    texto = texto.lower()
-    claves = [
-        "pago", "pago movil", "pago móvil", "pago mov", "pago movi", "pago movl",
-        "movil", "móvil", "pm",
-        "bdv", "banesco", "bancamiga", "provincial", "mercantil", "venezuela",
-        "transferencia", "transferi", "transferí", "transferido",
-        "te envié", "te envie", "te mandé", "te mande", "te paso",
-        "servicios", "pago por", "pago por servicios",
-        "pago listo", "pago hecho", "ahí va", "ahi va", "ahí está", "ahi esta"
-    ]
-
-    return any(c in texto for c in claves)
-
-
-# -----------------------------
-# OCR SIMULADO PARA SOPORTE
-# -----------------------------
-def extraer_datos_soporte(local_path):
-    return {
-        "fecha": "21/09/2026 09:37 am",
-        "banco": "Banco de Venezuela",
-        "monto": "50.000,00",
-        "operacion": "093730929909",
-        "mensaje": "servicios",
-        "imagen": local_path
-    }
-
-# OCR VERDADERO PARA SOPORTE
-@app.post("/pagomovil_ocr")
-async def pagomovil_ocr(imagen: UploadFile = File(...)):
-    contenido = await imagen.read()
-    respuesta = openai.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "input_image", "image": contenido},
-                    {"type": "text", "text": "Extrae fecha, monto, banco, referencia y concepto del pago móvil."}
-                ]
-            }
-        ]
-    )
-    texto = respuesta.choices[0].message["content"]
-    datos = parsear_ocr(texto)
-    return datos
-# -----------------------------
-# ENDPOINT PAGO MÓVIL -> CSV
-# -----------------------------
-@app.get("/pagomovil_csv")
-def pagomovil_csv(chat: str, desde: str, hasta: str):
-
-    # Validación de fechas
-    try:
-        fecha_desde = datetime.fromisoformat(desde)
-        fecha_hasta = datetime.fromisoformat(hasta)
-    except:
-        return JSONResponse(
-            {"mensaje": "Formato de fecha inválido. Use YYYY-MM-DD."},
-            status_code=400
-        )
-
-    from_ts = int(fecha_desde.timestamp())
-    to_ts = int(fecha_hasta.timestamp())
-
-    query = """
-    SELECT 
-        message_id,
-        chat_name,
-        sender_name,
-        ts,
-        text,
-        media_type,
-        filename,
-        mime_type,
-        local_path,
-        direct_path,
-        file_length,
-        media_key,
-        file_sha256,
-        file_enc_sha256,
-        ocr_text,
-        banco,
-        monto,
-        operacion,
-        fecha_soporte
-    FROM messages
-    WHERE chat_name ILIKE %s
-    AND ts BETWEEN %s AND %s
-    ORDER BY ts ASC;
-    """
-
-    params = [f"%{chat}%", from_ts, to_ts]
-
-    conn = get_conn()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute(query, params)
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
-
-    if len(rows) == 0:
-        return JSONResponse(
-            {"mensaje": "No se encontraron mensajes para ese chat en ese rango de fechas."},
-            status_code=404
-        )
-    
-    # Reparar UTF-8 de todos los mensajes
-    for msg in rows:
-        texto = msg.get("text")
-        msg["text"] = reparar_utf8(texto) if texto else ""
-    
-    # Detectar pagos móviles
-    pagos = [msg for msg in rows if es_pago_movil(msg["text"])]
-
-    if len(pagos) == 0:
-        return JSONResponse(
-            {"mensaje": "No se detectaron pagos móviles en ese rango de fechas."},
-            status_code=404
-        )
-
-    # Crear CSV
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["Fecha","Operacion","Telefono","Monto"])
-    filas_validas = 0
-    # Solo imprimir pagos completos
-    for p in pagos:
-        local_path = p["local_path"] or "/app/static/soporte_pagomovil.png"
-        datos = extraer_datos_soporte(local_path)
-
-        # Extraer teléfono del mensaje original
-        telefono = re.findall(r"\d{4}-?\d{7}", p["text"])
-        telefono = telefono[0] if telefono else ""
-
-        # Datos del soporte
-        fecha = datos["fecha"].split(" ")[0] if datos["fecha"] else ""
-        operacion = datos["operacion"] or ""
-        monto = datos["monto"].replace(".", "").replace(",", "") if datos["monto"] else ""
-
-        # Solo imprimir si está completo
-        if fecha and operacion and telefono and monto:
-            writer.writerow([fecha, operacion, telefono, monto])
-            filas_validas += 1
-
-        if filas_validas == 0:
-            return JSONResponse(
-                {"mensaje": "No se generó el CSV porque no se encontraron datos completos para el rango de fechas especificado."},
-                status_code=404
-            )
-        
-        writer.writerow([])
-        writer.writerow(["ERRORES DETECTADOS"])
-        writer.writerow(["Fecha", "Motivo"])
-        for err in errores:
-            writer.writerow([err["fecha"], err["motivo"]])
-
-
-        csv_data = output.getvalue()
-    
-        return Response(
-            content=csv_data,
-            media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=pagos.csv"}
-        )
-
-
-@app.get("/debug_columns")
-def debug_columns():
-    try:
-        conn = get_conn()
-        cur = conn.cursor()
-
-        cur.execute("""
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_name = 'messages'
-            ORDER BY ordinal_position;
-        """)
-
-        cols = [row[0] for row in cur.fetchall()]
-        cur.close()
-        conn.close()
-
-        return cols
-
-    except Exception as e:
-        return {"error": str(e)}
-
-@app.get("/pagomovil_info")
-def pagomovil_info(chat: str, desde: str, hasta: str):
-
-    # Validación de fechas
-    try:
-        fecha_desde = datetime.fromisoformat(desde)
-        fecha_hasta = datetime.fromisoformat(hasta)
-    except:
-        return JSONResponse(
-            {"mensaje": "Formato de fecha inválido. Use YYYY-MM-DD."},
-            status_code=400
-        )
-
-    from_ts = int(fecha_desde.timestamp())
-    to_ts = int(fecha_hasta.timestamp())
-
-    query = """
-    SELECT 
-        message_id,
-        chat_name,
-        sender_name,
-        ts,
-        text,
-        media_type,
-        filename,
-        mime_type,
-        local_path,
-        direct_path,
-        file_length,
-        media_key,
-        file_sha256,
-        file_enc_sha256,
-        ocr_text,
-        banco,
-        monto,
-        operacion,
-        fecha_soporte
-    FROM messages
-    WHERE chat_name ILIKE %s
-    AND ts BETWEEN %s AND %s
-    ORDER BY ts ASC;
-    """
-
-    params = [f"%{chat}%", from_ts, to_ts]
-
-    conn = get_conn()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute(query, params)
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
-
-    if len(rows) == 0:
-        return JSONResponse(
-            {"mensaje": "No se encontraron mensajes para ese chat en ese rango de fechas."},
-            status_code=404
-        )
-    
-    # Reparar UTF-8 de todos los mensajes
-    for msg in rows:
-        texto = msg.get("text")
-        msg["text"] = reparar_utf8(texto) if texto else ""
-    
-    # Detectar pagos móviles
-    pagos = [msg for msg in rows if es_pago_movil(msg["text"])]
-
-    if len(pagos) == 0:
-        return JSONResponse(
-            {"mensaje": "No se detectaron pagos móviles en ese rango de fechas."},
-            status_code=404
-        )
-
-    # Auditoría
-    errores = []
-    fechas_incompletas = []
-    pagos_incompletos = 0
-    pagos_validos = 0
-
-    for p in pagos:
-        local_path = p["local_path"] or "/app/static/soporte_pagomovil.png"
-        datos = extraer_datos_soporte(local_path)
-        # Extraer teléfono del mensaje original
-        telefono = re.findall(r"\d{4}-?\d{7}", p["text"])
-        telefono = telefono[0] if telefono else ""
-        # Datos del soporte
-        fecha = datos["fecha"].split(" ")[0] if datos["fecha"] else ""
-        operacion = datos["operacion"] or ""
-        monto = datos["monto"].replace(".", "").replace(",", "") if datos["monto"] else ""
-        # Verificar si el registro está completo
-        if fecha and operacion and telefono and monto:
-            pagos_validos += 1
-        else:
-            pagos_incompletos += 1
-            motivo = []
-            if not fecha:
-                motivo.append("Falta fecha")
-            if not operacion:
-                motivo.append("Falta operación")
-            if not telefono:
-                motivo.append("Falta teléfono")
-            if not monto:
-                motivo.append("Monto vacío")
-            errores.append({
-                "fecha": fecha or "desconocida",
-                "motivo": ", ".join(motivo)
-            })
-            if fecha:
-                fechas_incompletas.append(fecha)
-        # Eliminar duplicados en fechas
-        fechas_incompletas = list(set(fechas_incompletas))
-    
-        return {
-            "pagos_validos": pagos_validos,
-            "pagos_incompletos": pagos_incompletos,
-            "fechas_incompletas": fechas_incompletas,
-            "errores": errores
-        }
-
-# endpoint para actuar con OCR y producir cvs para un chat y entre fechas
-
-@app.get("/mensajes_chat")
-def mensajes_chat(chat: str, desde: str, hasta: str):
-    print(">>> desde crudo:", repr(desde))
-    # LIMPIEZA BÁSICA
-    desde = desde.strip()
-
-    print(">>> desde limpio:", repr(desde))
-
-    # Validación de fechas
-    try:
-        fecha_desde = datetime.fromisoformat(desde)
-        fecha_hasta = datetime.fromisoformat(hasta)
-    except:
-        return JSONResponse(
-            {"mensaje": "Formato de fecha inválido. Use YYYY-MM-DD."},
-            status_code=400
-        )
-
-    from_ts = int(fecha_desde.timestamp())
-    to_ts = int(fecha_hasta.timestamp())
-
-    query = """
-    SELECT 
-        message_id,
-        chat_name,
-        sender_name,
-        ts,
-        text,
-        media_type,
-        filename,
-        mime_type,
-        local_path,
-        direct_path,
-        file_length,
-        media_key,
-        file_sha256,
-        file_enc_sha256,
-        ocr_text,
-        banco,
-        monto,
-        operacion,
-        fecha_soporte
-    FROM messages
-    WHERE chat_name ILIKE %s
-    AND ts BETWEEN %s AND %s
-    ORDER BY ts ASC;
-    """
-
-    params = [f"%{chat}%", from_ts, to_ts]
-
-    conn = get_conn()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute(query, params)
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
-
-    # Reparar UTF-8
-    for msg in rows:
-        texto = msg.get("text")
-        msg["text"] = reparar_utf8(texto) if texto else ""
-
-    return rows
-
-# metodo POST
-@app.post("/mensajes_chat_post")
-def mensajes_chat_post(filtro: FiltroAuditoria = Body(...)):
-    print(">>> POST recibido:", filtro)
-
-    try:
-        # Convertir fechas ISO a timestamp UNIX
-        ts_desde = int(datetime.fromisoformat(filtro.desde).timestamp())
-        ts_hasta = int(datetime.fromisoformat(filtro.hasta).timestamp())
-
-        conn = get_conn()
-        cur = conn.cursor()
-
-        cur.execute("""
-            SELECT chat_name, ts, text
-            FROM messages
-            WHERE chat_name = %s
-              AND ts BETWEEN %s AND %s
-            ORDER BY ts ASC;
-        """, (filtro.chat, ts_desde, ts_hasta))
-
-        rows = cur.fetchall()
-
-        mensajes = []
-        for row in rows:
-            mensajes.append({
-                "chat": row[0],
-                "fecha": row[1],     # ts
-                "mensaje": row[2]    # text
-            })
-
-        cur.close()
-        conn.close()
-
-        return {"resultados": mensajes}
-
-    except Exception as e:
-        print(">>> ERROR interno:", e)
-        return {"resultados": "Internal"}
-
-
-
-@app.get("/debug_chat")
-def debug_chat(chat: str):
-    try:
-        conn = get_conn()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-
-        cur.execute("""
-            SELECT message_id, chat_name, sender_name, ts, text, local_path
-            FROM messages
-            WHERE chat_name ILIKE %s
-            ORDER BY ts DESC
-            LIMIT 50;
-        """, (f"%{chat}%",))
-
-        rows = cur.fetchall()
-        cur.close()
-        conn.close()
-
-        return rows
-
-    except Exception as e:
-        return {"error": str(e)}
-
-@app.get("/debug_raw")
-def debug_raw(id: int):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT text FROM messages WHERE message_id = %s", (id,))
-    row = cur.fetchone()
-    cur.close()
-    conn.close()
-    return {"raw": row[0]}
 
 
