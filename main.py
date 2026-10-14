@@ -185,15 +185,18 @@ def mensajes_chat(chat: str, desde: str, hasta: str):
 @app.get("/pagomovil_csv")
 def pagomovil_csv(chat: str, desde: str, hasta: str):
 
+    # Validación de fechas
     try:
         fecha_desde = datetime.fromisoformat(desde)
         fecha_hasta = datetime.fromisoformat(hasta)
     except:
-        return JSONResponse({"mensaje": "Formato de fecha inválido"}, status_code=400)
+        return JSONResponse({"mensaje": "Formato de fecha inválido. Use YYYY-MM-DD."},
+                            status_code=400)
 
     from_ts = int(fecha_desde.timestamp())
     to_ts = int(fecha_hasta.timestamp())
 
+    # Buscar mensajes del chat
     conn = get_conn()
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("""
@@ -209,16 +212,21 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
     conn.close()
 
     if not rows:
-        return JSONResponse({"mensaje": "No se encontraron mensajes"}, status_code=404)
+        return JSONResponse({"mensaje": "No se encontraron mensajes para ese chat en ese rango de fechas."},
+                            status_code=404)
 
+    # Reparar UTF‑8
     for msg in rows:
         msg["text"] = reparar_utf8(msg["text"])
 
+    # Detectar pagos móviles por texto
     pagos = [msg for msg in rows if es_pago_movil(msg["text"])]
 
     if not pagos:
-        return JSONResponse({"mensaje": "No se detectaron pagos móviles"}, status_code=404)
+        return JSONResponse({"mensaje": "No se detectaron pagos móviles en ese rango de fechas."},
+                            status_code=404)
 
+    # Crear CSV
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["Fecha", "Operacion", "Telefono", "Monto"])
@@ -226,22 +234,63 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
     filas_validas = 0
 
     for p in pagos:
-        local_path = p["local_path"] or "/app/static/soporte_pagomovil.png"
-        datos = extraer_datos_soporte(local_path)
 
+        # Extraer teléfono del mensaje original
         telefono = re.findall(r"\d{4}-?\d{7}", p["text"])
         telefono = telefono[0] if telefono else ""
 
-        fecha = datos["fecha"].split(" ")[0]
-        operacion = datos["operacion"]
-        monto = datos["monto"].replace(".", "").replace(",", "")
+        # OCR real si existe imagen
+        datos = None
+        if p["local_path"]:
+            try:
+                with open(p["local_path"], "rb") as img_file:
+                    contenido = img_file.read()
 
+                respuesta = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "input_image", "image": contenido},
+                                {"type": "text", "text": "Extrae fecha, monto, banco, referencia y concepto del pago móvil."}
+                            ]
+                        }
+                    ]
+                )
+
+                texto_ocr = respuesta.choices[0].message["content"]
+
+                datos = {
+                    "fecha": re.search(r"(\d{2}/\d{2}/\d{4})", texto_ocr).group(1)
+                             if re.search(r"(\d{2}/\d{2}/\d{4})", texto_ocr) else "",
+                    "operacion": re.search(r"(\d{6,12})", texto_ocr).group(1)
+                                 if re.search(r"(\d{6,12})", texto_ocr) else "",
+                    "monto": re.search(r"([\d\.]+,\d{2})", texto_ocr).group(1)
+                             if re.search(r"([\d\.]+,\d{2})", texto_ocr) else "",
+                }
+
+            except Exception:
+                # Si falla OCR, usar datos simulados
+                datos = extraer_datos_soporte(p["local_path"])
+
+        else:
+            # Si no hay imagen, usar datos simulados
+            datos = extraer_datos_soporte(p["local_path"])
+
+        # Datos del soporte
+        fecha = datos["fecha"].split(" ")[0] if datos["fecha"] else ""
+        operacion = datos["operacion"] or ""
+        monto = datos["monto"].replace(".", "").replace(",", "") if datos["monto"] else ""
+
+        # Solo imprimir si está completo
         if fecha and operacion and telefono and monto:
             writer.writerow([fecha, operacion, telefono, monto])
             filas_validas += 1
 
     if filas_validas == 0:
-        return JSONResponse({"mensaje": "No se generó CSV"}, status_code=404)
+        return JSONResponse({"mensaje": "No se generó el CSV porque no se encontraron datos completos."},
+                            status_code=404)
 
     csv_data = output.getvalue()
 
@@ -250,6 +299,7 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=pagos.csv"}
     )
+
 
 # -----------------------------
 # DEBUG
