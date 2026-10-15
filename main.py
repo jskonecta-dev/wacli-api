@@ -180,7 +180,14 @@ def mensajes_chat(chat: str, desde: str, hasta: str):
     return rows
 
 # -----------------------------
-# NUEVO CSV LIMPIO
+# MI NÚMERO DE TELÉFONO (ENV)
+# -----------------------------
+MI_TELEFONO = os.getenv("MI_TELEFONO", "")
+MI_TELEFONO_LIMPIO = MI_TELEFONO.replace("-", "").strip()
+
+
+# -----------------------------
+# NUEVO CSV LIMPIO + ENTRANTE/SALIENTE
 # -----------------------------
 @app.get("/pagomovil_csv")
 def pagomovil_csv(chat: str, desde: str, hasta: str):
@@ -229,7 +236,7 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
     # Crear CSV
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Fecha", "Operacion", "Telefono", "Monto"])
+    writer.writerow(["Fecha", "Operacion", "Telefono", "Monto", "TipoPago"])
 
     filas_validas = 0
 
@@ -238,6 +245,14 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
         # Extraer teléfono del mensaje original
         telefono = re.findall(r"\d{4}-?\d{7}", p["text"])
         telefono = telefono[0] if telefono else ""
+        telefono_limpio = telefono.replace("-", "").strip()
+
+        # Validar que realmente es un teléfono (11 dígitos)
+        if len(telefono_limpio) != 11:
+            continue
+
+        # Determinar si es entrante o saliente
+        tipo_pago = "Entrante" if telefono_limpio == MI_TELEFONO_LIMPIO else "Saliente"
 
         # OCR real si existe imagen
         datos = None
@@ -271,11 +286,9 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
                 }
 
             except Exception:
-                # Si falla OCR, usar datos simulados
                 datos = extraer_datos_soporte(p["local_path"])
 
         else:
-            # Si no hay imagen, usar datos simulados
             datos = extraer_datos_soporte(p["local_path"])
 
         # Datos del soporte
@@ -285,7 +298,7 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
 
         # Solo imprimir si está completo
         if fecha and operacion and telefono and monto:
-            writer.writerow([fecha, operacion, telefono, monto])
+            writer.writerow([fecha, operacion, telefono, monto, tipo_pago])
             filas_validas += 1
 
     if filas_validas == 0:
@@ -299,6 +312,7 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=pagos.csv"}
     )
+
 
 
 # -----------------------------
