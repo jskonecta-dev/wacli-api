@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Query, UploadFile, File, Body
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import psycopg2
@@ -507,6 +507,13 @@ def buscar_avanzado(
 
     except Exception as e:
         return {"error": str(e)}
+
+# --- otros endpoints, routers, lógica ---
+
+@app.get("/auditoria")
+def descargar_csv():
+    return FileResponse("auditoria.csv", media_type="text/csv", filename="auditoria.csv")
+
 
 
 
