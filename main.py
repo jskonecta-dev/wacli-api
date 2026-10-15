@@ -187,7 +187,7 @@ MI_TELEFONO_LIMPIO = MI_TELEFONO.replace("-", "").strip()
 
 
 # -----------------------------
-# NUEVO CSV LIMPIO + ENTRANTE/SALIENTE
+# NUEVO CSV LIMPIO + ENTRANTE/SALIENTE + BANCO + CONCEPTO
 # -----------------------------
 @app.get("/pagomovil_csv")
 def pagomovil_csv(chat: str, desde: str, hasta: str):
@@ -236,7 +236,7 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
     # Crear CSV
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Fecha", "Operacion", "Telefono", "Monto", "TipoPago"])
+    writer.writerow(["Fecha", "Operacion", "Telefono", "Monto", "Banco", "Concepto", "TipoPago"])
 
     filas_validas = 0
 
@@ -283,6 +283,14 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
                                  if re.search(r"(\d{6,12})", texto_ocr) else "",
                     "monto": re.search(r"([\d\.]+,\d{2})", texto_ocr).group(1)
                              if re.search(r"([\d\.]+,\d{2})", texto_ocr) else "",
+                    "banco": re.search(r"(Banesco|BDV|Bancamiga|Banco de Venezuela|Provincial|Mercantil)",
+                                      texto_ocr, re.IGNORECASE).group(1)
+                             if re.search(r"(Banesco|BDV|Bancamiga|Banco de Venezuela|Provincial|Mercantil)",
+                                          texto_ocr, re.IGNORECASE) else "",
+                    "concepto": re.search(r"(servicios|pago por|pago hecho|transferencia|compra|venta)",
+                                         texto_ocr, re.IGNORECASE).group(1)
+                                if re.search(r"(servicios|pago por|pago hecho|transferencia|compra|venta)",
+                                             texto_ocr, re.IGNORECASE) else ""
                 }
 
             except Exception:
@@ -295,10 +303,12 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
         fecha = datos["fecha"].split(" ")[0] if datos["fecha"] else ""
         operacion = datos["operacion"] or ""
         monto = datos["monto"].replace(".", "").replace(",", "") if datos["monto"] else ""
+        banco = datos.get("banco", "")
+        concepto = datos.get("concepto", "")
 
         # Solo imprimir si está completo
         if fecha and operacion and telefono and monto:
-            writer.writerow([fecha, operacion, telefono, monto, tipo_pago])
+            writer.writerow([fecha, operacion, telefono, monto, banco, concepto, tipo_pago])
             filas_validas += 1
 
     if filas_validas == 0:
@@ -312,6 +322,7 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=pagos.csv"}
     )
+
 
 
 
