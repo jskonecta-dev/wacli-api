@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Query, UploadFile, File, Body
-from fastapi.responses import JSONResponse, Response, FileResponse
+from fastapi.responses import JSONResponse, Response, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import psycopg2
@@ -317,10 +317,16 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
 
     csv_data = output.getvalue()
 
-    return Response(
-        content=csv_data,
+    buffer = io.BytesIO(csv_data.encode("utf-8"))
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
         media_type="application/octet-stream",
-        headers={"Content-Disposition": "attachment; filename=pagos.csv"}
+        headers={
+            "Content-Disposition": "attachment; filename=pagos.csv",
+            "Content-Length": str(len(csv_data.encode("utf-8")))
+        }
     )
 
 
