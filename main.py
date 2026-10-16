@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, Query, UploadFile, File, Body
 from fastapi.responses import JSONResponse, Response, FileResponse, StreamingResponse
+import tempfile
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import psycopg2
@@ -316,17 +317,22 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
                             status_code=404)
 
     csv_data = output.getvalue()
-    data_bytes = csv_data.encode("utf-8")
-    buffer = io.BytesIO(data_bytes)
-    buffer.seek(0)
+    #data_bytes = csv_data.encode("utf-8")
+    #buffer = io.BytesIO(data_bytes)
+    #buffer.seek(0)
 
-    return StreamingResponse(
-        buffer,
+    # Guardar temporalmente el archivo en disco
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
+    tmp.write(csv_data.encode("utf-8"))
+    tmp.close()
+
+    # Devolverlo como archivo real
+    return FileResponse(
+        path=tmp.name,
         media_type="application/octet-stream",
-        headers={
-            "Content-Disposition": "attachment; filename=pagos.csv",
-            "Content-Length": str(len(csv_data.encode("utf-8")))
-        }
+        filename="pagos.csv"     
+    
+   
     )
 
 
