@@ -319,7 +319,7 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
 
     return Response(
         content=csv_data,
-        media_type="text/csv",
+        media_type="application/octet-stream",
         headers={"Content-Disposition": "attachment; filename=pagos.csv"}
     )
 
