@@ -443,7 +443,19 @@ def pagomovil_json(chat: str, desde: str, hasta: str):
                 "telefono": telefono,
                 "monto": monto,
                 "banco": banco,
-                "concepto": concepto    
+                "concepto": concepto,
+                "tipo_pago": tipo_pago
+            })
+
+    if not resultados:
+        return JSONResponse({"mensaje": "No se generaron datos completos."},
+                            status_code=404)
+
+    return resultados
+
+
+
+
 @app.get("/pagos", response_class=HTMLResponse)
 def pagos_page():
     return """
