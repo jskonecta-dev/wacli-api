@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, Query, UploadFile, File, Body
 from fastapi.responses import JSONResponse, Response, FileResponse, PlainTextResponse
 import tempfile
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import psycopg2
@@ -321,7 +322,220 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
 
     return PlainTextResponse(csv_data, media_type="text/plain")
 
-    
+@app.get("/pagomovil_json")
+def pagomovil_json(chat: str, desde: str, hasta: str):
+
+    # Validación de fechas
+    try:
+        fecha_desde = datetime.fromisoformat(desde)
+        fecha_hasta = datetime.fromisoformat(hasta)
+    except:
+        return JSONResponse({"mensaje": "Formato de fecha inválido. Use YYYY-MM-DD."},
+                            status_code=400)
+
+    from_ts = int(fecha_desde.timestamp())
+    to_ts = int(fecha_hasta.timestamp())
+
+    # Buscar mensajes del chat
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("""
+        SELECT message_id, chat_name, sender_name, ts, text, local_path
+        FROM messages
+        WHERE chat_name ILIKE %s
+        AND ts BETWEEN %s AND %s
+        ORDER BY ts ASC;
+    """, (f"%{chat}%", from_ts, to_ts))
+
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    if not rows:
+        return JSONResponse({"mensaje": "No se encontraron mensajes para ese chat en ese rango de fechas."},
+                            status_code=404)
+
+    # Reparar UTF‑8
+    for msg in rows:
+        msg["text"] = reparar_utf8(msg["text"])
+
+    # Detectar pagos móviles por texto
+    pagos = [msg for msg in rows if es_pago_movil(msg["text"])]
+
+    if not pagos:
+        return JSONResponse({"mensaje": "No se detectaron pagos móviles en ese rango de fechas."},
+                            status_code=404)
+
+    resultados = []
+
+    for p in pagos:
+
+        # Extraer teléfono del mensaje original
+        telefono = re.findall(r"\d{4}-?\d{7}", p["text"])
+        telefono = telefono[0] if telefono else ""
+        telefono_limpio = telefono.replace("-", "").strip()
+
+        # Validar que realmente es un teléfono (11 dígitos)
+        if len(telefono_limpio) != 11:
+            continue
+
+        # Determinar si es entrante o saliente
+        tipo_pago = "Entrante" if telefono_limpio == MI_TELEFONO_LIMPIO else "Saliente"
+
+        # OCR real si existe imagen
+        datos = None
+        if p["local_path"]:
+            try:
+                with open(p["local_path"], "rb") as img_file:
+                    contenido = img_file.read()
+
+                respuesta = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "input_image", "image": contenido},
+                                {"type": "text", "text": "Extrae fecha, monto, banco, referencia y concepto del pago móvil."}
+                            ]
+                        }
+                    ]
+                )
+
+                texto_ocr = respuesta.choices[0].message["content"]
+
+                datos = {
+                    "fecha": re.search(r"(\d{2}/\d{2}/\d{4})", texto_ocr).group(1)
+                             if re.search(r"(\d{2}/\d{2}/\d{4})", texto_ocr) else "",
+                    "operacion": re.search(r"(\d{6,12})", texto_ocr).group(1)
+                                 if re.search(r"(\d{6,12})", texto_ocr) else "",
+                    "monto": re.search(r"([\d\.]+,\d{2})", texto_ocr).group(1)
+                             if re.search(r"([\d\.]+,\d{2})", texto_ocr) else "",
+                    "banco": re.search(r"(Banesco|BDV|Bancamiga|Banco de Venezuela|Provincial|Mercantil)",
+                                      texto_ocr, re.IGNORECASE).group(1)
+                             if re.search(r"(Banesco|BDV|Bancamiga|Banco de Venezuela|Provincial|Mercantil)",
+                                          texto_ocr, re.IGNORECASE) else "",
+                    "concepto": re.search(r"(servicios|pago por|pago hecho|transferencia|compra|venta)",
+                                         texto_ocr, re.IGNORECASE).group(1)
+                                if re.search(r"(servicios|pago por|pago hecho|transferencia|compra|venta)",
+                                             texto_ocr, re.IGNORECASE) else ""
+                }
+
+            except Exception:
+                datos = extraer_datos_soporte(p["local_path"])
+
+        else:
+            datos = extraer_datos_soporte(p["local_path"])
+
+        # Datos del soporte
+        fecha = datos["fecha"].split(" ")[0] if datos["fecha"] else ""
+        operacion = datos["operacion"] or ""
+        monto_str = datos["monto"].replace(".", "").replace(",", "") if datos["monto"] else ""
+        monto = int(monto_str) // 100 if monto_str else ""
+        banco = datos.get("banco", "")
+        concepto = datos.get("concepto", "")
+
+        # Solo agregar si está completo
+        if fecha and operacion and telefono and monto:
+            resultados.append({
+                "fecha": fecha,
+                "operacion": operacion,
+                "telefono": telefono,
+                "monto": monto,
+                "banco": banco,
+                "concepto": concepto    
+@app.get("/pagos", response_class=HTMLResponse)
+def pagos_page():
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Pagos Móviles</title>
+        <style>
+            body { font-family: Arial; padding: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+            th { background: #f0f0f0; }
+            input, select { padding: 8px; margin: 5px; }
+            button { padding: 10px 15px; }
+        </style>
+    </head>
+    <body>
+        <h2>Resumen de Pagos Móviles</h2>
+
+        <label>Chat:</label>
+        <select id="chat"></select>
+
+        <br>
+
+        <label>Desde:</label>
+        <input type="date" id="desde">
+
+        <label>Hasta:</label>
+        <input type="date" id="hasta">
+
+        <button onclick="buscarPagos()">Buscar</button>
+
+        <table id="tabla">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Operación</th>
+                    <th>Teléfono</th>
+                    <th>Monto</th>
+                    <th>Banco</th>
+                    <th>Concepto</th>
+                    <th>Tipo</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+        <script>
+            async function cargarChats() {
+                let res = await fetch('/seleccionar_chat');
+                let chats = await res.json();
+                let sel = document.getElementById('chat');
+                chats.forEach(c => {
+                    let opt = document.createElement('option');
+                    opt.value = c;
+                    opt.textContent = c;
+                    sel.appendChild(opt);
+                });
+            }
+
+            async function buscarPagos() {
+                let chat = document.getElementById('chat').value;
+                let desde = document.getElementById('desde').value;
+                let hasta = document.getElementById('hasta').value;
+
+                let url = `/pagomovil_json?chat=${chat}&desde=${desde}&hasta=${hasta}`;
+                let res = await fetch(url);
+                let datos = await res.json();
+
+                let tbody = document.querySelector('#tabla tbody');
+                tbody.innerHTML = '';
+
+                datos.forEach(p => {
+                    let tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${p.fecha}</td>
+                        <td>${p.operacion}</td>
+                        <td>${p.telefono}</td>
+                        <td>${p.monto}</td>
+                        <td>${p.banco}</td>
+                        <td>${p.concepto}</td>
+                        <td>${p.tipo_pago}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            cargarChats();
+        </script>
+    </body>
+    </html>
+    """
    
   
   
