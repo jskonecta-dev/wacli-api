@@ -322,19 +322,37 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
 
     return PlainTextResponse(csv_data, media_type="text/plain")
 
+def parse_fecha(fecha_str):
+    # Intenta YYYY-MM-DD
+    try:
+        return datetime.fromisoformat(fecha_str)
+    except:
+        pass
+
+    # Intenta DD/MM/YYYY
+    try:
+        return datetime.strptime(fecha_str, "%d/%m/%Y")
+    except:
+        pass
+
+    return None
+
+
 @app.get("/pagomovil_json")
 def pagomovil_json(chat: str, desde: str, hasta: str):
 
     # Validación de fechas
-    try:
-        fecha_desde = datetime.fromisoformat(desde)
-        fecha_hasta = datetime.fromisoformat(hasta)
-    except:
-        return JSONResponse({"mensaje": "Formato de fecha inválido. Use YYYY-MM-DD."},
+ 
+    fecha_desde = parse_fecha(desde)
+    fecha_hasta = parse_fecha(hasta)
+    
+    if not fecha_desde or not fecha_hasta:
+        return JSONResponse({"mensaje": "Formato de fecha inválido. Use YYYY-MM-DD o DD/MM/YYYY."},
                             status_code=400)
 
     from_ts = int(fecha_desde.timestamp())
     to_ts = int(fecha_hasta.timestamp())
+       
 
     # Buscar mensajes del chat
     conn = get_conn()
