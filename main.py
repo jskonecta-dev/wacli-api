@@ -302,7 +302,9 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
         # Datos del soporte
         fecha = datos["fecha"].split(" ")[0] if datos["fecha"] else ""
         operacion = datos["operacion"] or ""
-        monto = datos["monto"].replace(".", "").replace(",", "") if datos["monto"] else ""
+        #monto = datos["monto"].replace(".", "").replace(",", "") if datos["monto"] else ""
+        monto_str = datos["monto"].replace(".", "").replace(",", "") if datos["monto"] else ""
+        monto = int(monto_str) // 100 if monto_str else ""
         banco = datos.get("banco", "")
         concepto = datos.get("concepto", "")
 
