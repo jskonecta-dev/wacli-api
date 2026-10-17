@@ -318,15 +318,19 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
                             status_code=404)
 
     csv_data = output.getvalue()
-    return PlainTextResponse(
-        content=csv_data,
-        media_type="text/plain"
-    )
     
    
-# -----------------------------
-# DEBUG
-# -----------------------------
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
+    tmp.write(csv_data.encode("utf-8"))
+    tmp.close()
+
+    return FileResponse(
+        path=tmp.name,
+        media_type="application/octet-stream",
+        filename="pagos.csv"
+    )
+  
+
 @app.get("/debug_chat")
 def debug_chat(chat: str):
     conn = get_conn()
