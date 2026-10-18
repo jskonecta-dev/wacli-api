@@ -522,7 +522,7 @@ def pagos_page():
             </thead>
             <tbody></tbody>
         </table>
-
+        cargarChats();
         <script>
             let datosGlobales = [];
         
@@ -591,7 +591,7 @@ def pagos_page():
                 URL.revokeObjectURL(url);
             }
         
-            cargarChats();
+            
         </script>
         
                 
