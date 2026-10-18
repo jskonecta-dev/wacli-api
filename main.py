@@ -472,121 +472,121 @@ def pagomovil_json(chat: str, desde: str, hasta: str):
     return resultados
 
 
-
-
 @app.get("/pagos", response_class=HTMLResponse)
 def pagos():
-    return HTMLResponse("""
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Pagos Móviles</title>
-    <style>
-        body { font-family: Arial; padding: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background: #f0f0f0; }
-        input, select { padding: 8px; margin: 5px; }
-        button { padding: 10px 15px; margin: 5px; }
-    </style>
-</head>
-<body>
+    html = (
+        "<!DOCTYPE html>"
+        "<html>"
+        "<head>"
+        "<title>Pagos Móviles</title>"
+        "<style>"
+        "body { font-family: Arial; padding: 20px; }"
+        "table { width: 100%; border-collapse: collapse; margin-top: 20px; }"
+        "th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }"
+        "th { background: #f0f0f0; }"
+        "input, select { padding: 8px; margin: 5px; }"
+        "button { padding: 10px 15px; margin: 5px; }"
+        "</style>"
+        "</head>"
+        "<body>"
 
-    <h2>Resumen de Pagos Móviles</h2>
+        "<h2>Resumen de Pagos Móviles</h2>"
 
-    <label>Chat:</label>
-    <select id="chat"></select>
+        "<label>Chat:</label>"
+        "<select id='chat'></select>"
 
-    <br>
+        "<br>"
 
-    <label>Desde:</label>
-    <input type="date" id="desde">
+        "<label>Desde:</label>"
+        "<input type='date' id='desde'>"
 
-    <label>Hasta:</label>
-    <input type="date" id="hasta">
+        "<label>Hasta:</label>"
+        "<input type='date' id='hasta'>"
 
-    <button onclick="buscarPagos()">Buscar</button>
-    <button onclick="exportarCSV()">Exportar CSV</button>
+        "<button onclick='buscarPagos()'>Buscar</button>"
+        "<button onclick='exportarCSV()'>Exportar CSV</button>"
 
-    <table id="tabla">
-        <thead>
-            <tr>
-                <th>Fecha</th>
-                <th>Operación</th>
-                <th>Teléfono</th>
-                <th>Monto</th>
-                <th>Banco</th>
-                <th>Concepto</th>
-                <th>Tipo</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
+        "<table id='tabla'>"
+        "<thead>"
+        "<tr>"
+        "<th>Fecha</th>"
+        "<th>Operación</th>"
+        "<th>Teléfono</th>"
+        "<th>Monto</th>"
+        "<th>Banco</th>"
+        "<th>Concepto</th>"
+        "<th>Tipo</th>"
+        "</tr>"
+        "</thead>"
+        "<tbody></tbody>"
+        "</table>"
 
-    <script>
-        let datosGlobales = [];
+        "<script>"
+        "let datosGlobales = [];"
+        
+        "async function cargarChats() {"
+        "    let res = await fetch('/seleccionar_chat');"
+        "    let chats = await res.json();"
+        "    let sel = document.getElementById('chat');"
+        "    sel.innerHTML = '';"
+        "    chats.forEach(c => {"
+        "        let opt = document.createElement('option');"
+        "        opt.value = c;"
+        "        opt.textContent = c;"
+        "        sel.appendChild(opt);"
+        "    });"
+        "}"
 
-        async function cargarChats() {
-            try {
-                let res = await fetch('/seleccionar_chat');
-                let chats = await res.json();
+        "async function buscarPagos() {"
+        "    let chat = document.getElementById('chat').value;"
+        "    let desde = document.getElementById('desde').value;"
+        "    let hasta = document.getElementById('hasta').value;"
+        "    let url = `/pagomovil_json?chat=${chat}&desde=${desde}&hasta=${hasta}`;"
+        "    let res = await fetch(url);"
+        "    let datos = await res.json();"
+        "    datosGlobales = datos;"
+        "    let tbody = document.querySelector('#tabla tbody');"
+        "    tbody.innerHTML = '';"
+        "    datos.forEach(p => {"
+        "        let tr = document.createElement('tr');"
+        "        tr.innerHTML = "
+        "            `<td>${p.fecha}</td>` +"
+        "            `<td>${p.operacion}</td>` +"
+        "            `<td>${p.telefono}</td>` +"
+        "            `<td>${p.monto}</td>` +"
+        "            `<td>${p.banco}</td>` +"
+        "            `<td>${p.concepto}</td>` +"
+        "            `<td>${p.tipo_pago}</td>`;"
+        "        tbody.appendChild(tr);"
+        "    });"
+        "}"
 
-                let sel = document.getElementById('chat');
-                sel.innerHTML = "";  // limpiar
+        "function exportarCSV() {"
+        "    if (datosGlobales.length === 0) { alert('No hay datos para exportar.'); return; }"
+        "    let encabezados = 'Fecha,Operacion,Telefono,Monto,Banco,Concepto,TipoPago\\n';"
+        "    let filas = datosGlobales.map(p => "
+        "        `${p.fecha},${p.operacion},${p.telefono},${p.monto},${p.banco},${p.concepto},${p.tipo_pago}`"
+        "    ).join('\\n');"
+        "    let contenido = encabezados + filas;"
+        "    let blob = new Blob([contenido], { type: 'text/csv' });"
+        "    let url = URL.createObjectURL(blob);"
+        "    let a = document.createElement('a');"
+        "    a.href = url;"
+        "    a.download = 'pagos_moviles.csv';"
+        "    a.click();"
+        "    URL.revokeObjectURL(url);"
+        "}"
 
-                chats.forEach(c => {
-                    let opt = document.createElement('option');
-                    opt.value = c;
-                    opt.textContent = c;
-                    sel.appendChild(opt);
-                });
+        "cargarChats();"
+        "</script>"
 
-            } catch (e) {
-                console.log("Error cargando chats:", e);
-            }
-        }
+        "</body>"
+        "</html>"
+    )
+    return HTMLResponse(html)
 
-        async function buscarPagos() {
-            let chat = document.getElementById('chat').value;
-            let desde = document.getElementById('desde').value;
-            let hasta = document.getElementById('hasta').value;
 
-            if (!chat) {
-                alert("Seleccione un chat.");
-                return;
-            }
 
-            let url = `/pagomovil_json?chat=${chat}&desde=${desde}&hasta=${hasta}`;
-            let res = await fetch(url);
-            let datos = await res.json();
-
-            datosGlobales = datos;
-
-            let tbody = document.querySelector('#tabla tbody');
-            tbody.innerHTML = '';
-
-            datos.forEach(p => {
-                let tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${p.fecha}</td>
-                    <td>${p.operacion}</td>
-                    <td>${p.telefono}</td>
-                    <td>${p.monto}</td>
-                    <td>${p.banco}</td>
-                    <td>${p.concepto}</td>
-                    <td>${p.tipo_pago}</td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-
-        function exportarCSV() {
-            if (datosGlobales.length === 0) {
-                alert("No hay datos para exportar.");
-                return;
-            }
-
-            let encabezados = "Fecha,Operacion
    
   
   
