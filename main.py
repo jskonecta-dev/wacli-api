@@ -524,6 +524,8 @@ def pagos_page():
         </table>
 
         <script>
+            let datosGlobales = [];
+        
             async function cargarChats() {
                 let res = await fetch('/seleccionar_chat');
                 let chats = await res.json();
@@ -535,19 +537,21 @@ def pagos_page():
                     sel.appendChild(opt);
                 });
             }
-
+        
             async function buscarPagos() {
                 let chat = document.getElementById('chat').value;
                 let desde = document.getElementById('desde').value;
                 let hasta = document.getElementById('hasta').value;
-
+        
                 let url = `/pagomovil_json?chat=${chat}&desde=${desde}&hasta=${hasta}`;
                 let res = await fetch(url);
                 let datos = await res.json();
-
+        
+                datosGlobales = datos;
+        
                 let tbody = document.querySelector('#tabla tbody');
                 tbody.innerHTML = '';
-
+        
                 datos.forEach(p => {
                     let tr = document.createElement('tr');
                     tr.innerHTML = `
@@ -562,66 +566,38 @@ def pagos_page():
                     tbody.appendChild(tr);
                 });
             }
-            <script>
-    
-    let datosGlobales = [];  // Guardamos los datos para exportar
-
-    async function buscarPagos() {
-        let chat = document.getElementById('chat').value;
-        let desde = document.getElementById('desde').value;
-        let hasta = document.getElementById('hasta').value;
-
-        let url = `/pagomovil_json?chat=${chat}&desde=${desde}&hasta=${hasta}`;
-        let res = await fetch(url);
-        let datos = await res.json();
-
-        datosGlobales = datos;  // Guardamos los datos para exportar
-
-        let tbody = document.querySelector('#tabla tbody');
-        tbody.innerHTML = '';
-
-        datos.forEach(p => {
-            let tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${p.fecha}</td>
-                <td>${p.operacion}</td>
-                <td>${p.telefono}</td>
-                <td>${p.monto}</td>
-                <td>${p.banco}</td>
-                <td>${p.concepto}</td>
-                <td>${p.tipo_pago}</td>
-            `;
-            tbody.appendChild(tr);
-        });
-    }
-
-    function exportarCSV() {
-        if (datosGlobales.length === 0) {
-            alert("No hay datos para exportar.");
-            return;
-        }
-
-        let encabezados = "Fecha,Operacion,Telefono,Monto,Banco,Concepto,TipoPago\n";
-        let filas = datosGlobales.map(p =>
-            `${p.fecha},${p.operacion},${p.telefono},${p.monto},${p.banco},${p.concepto},${p.tipo_pago}`
-        ).join("\n");
-
-        let contenido = encabezados + filas;
-
-        let blob = new Blob([contenido], { type: "text/csv" });
-        let url = URL.createObjectURL(blob);
-
-        let a = document.createElement("a");
-        a.href = url;
-        a.download = "pagos_moviles.csv";
-        a.click();
-
-        URL.revokeObjectURL(url);
-    }
-</script>
-
+        
+            function exportarCSV() {
+                if (datosGlobales.length === 0) {
+                    alert("No hay datos para exportar.");
+                    return;
+                }
+        
+                let encabezados = "Fecha,Operacion,Telefono,Monto,Banco,Concepto,TipoPago\n";
+                let filas = datosGlobales.map(p =>
+                    `${p.fecha},${p.operacion},${p.telefono},${p.monto},${p.banco},${p.concepto},${p.tipo_pago}`
+                ).join("\n");
+        
+                let contenido = encabezados + filas;
+        
+                let blob = new Blob([contenido], { type: "text/csv" });
+                let url = URL.createObjectURL(blob);
+        
+                let a = document.createElement("a");
+                a.href = url;
+                a.download = "pagos_moviles.csv";
+                a.click();
+        
+                URL.revokeObjectURL(url);
+            }
+        
             cargarChats();
         </script>
+        
+                
+            
+          
+    
     </body>
     </html>
     """
