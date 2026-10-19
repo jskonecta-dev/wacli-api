@@ -243,11 +243,13 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
 
     for p in pagos:
 
+        
         # Extraer teléfono del mensaje original
-        telefono = re.findall(r"\d{4}-?\d{7}", p["text"])
+        telefono = re.findall(r"04\d{9}", p["text"])
         telefono = telefono[0] if telefono else ""
         telefono_limpio = telefono.replace("-", "").strip()
-
+       
+        
         # Validar que realmente es un teléfono (11 dígitos)
         if len(telefono_limpio) != 11:
             continue
