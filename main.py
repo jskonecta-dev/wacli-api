@@ -389,13 +389,34 @@ def pagomovil_json(chat: str, desde: str, hasta: str):
     for p in pagos:
 
         # Extraer teléfono del mensaje original
-        telefono = re.findall(r"\d{4}-?\d{7}", p["text"])
-        telefono = telefono[0] if telefono else ""
-        telefono_limpio = telefono.replace("-", "").strip()
+       def extraer_telefono(texto):
+            # Normalizar texto del OCR
+            texto = texto.replace(" ", "").replace("\n", "")
+        
+            # Prefijos válidos de líneas móviles venezolanas
+            prefijos = ["0414", "0416", "0424", "0426"]
+        
+            # Buscar números con o sin guión
+            patrones = [
+                r"(04\d{2}-\d{7})",  # con guión
+                r"(04\d{9})"         # sin guión (Bancamiga, BDV a veces)
+            ]
+        
+            for p in patrones:
+                encontrados = re.findall(p, texto)
+                if encontrados:
+                    # Filtrar por prefijo válido
+                    for numero in encontrados:
+                        limpio = numero.replace("-", "")
+                        if limpio[:4] in prefijos:
+                            return numero
+        
+            return ""
+
 
         # Validar que realmente es un teléfono (11 dígitos)
-        if len(telefono_limpio) != 11:
-            continue
+        # if len(telefono_limpio) != 11:
+            # continue
 
         # Determinar si es entrante o saliente
         tipo_pago = "Entrante" if telefono_limpio == MI_TELEFONO_LIMPIO else "Saliente"
