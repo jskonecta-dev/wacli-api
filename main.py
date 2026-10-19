@@ -339,158 +339,92 @@ def parse_fecha(fecha_str):
 
 
 @app.get("/pagomovil_json")
-def pagomovil_json(chat: str, desde: str, hasta: str):
+def pagomovil_json(request: Request, chat: str, desde: str, hasta: str):
 
-    # Validación de fechas
- 
-    fecha_desde = parse_fecha(desde)
-    fecha_hasta = parse_fecha(hasta)
-    
-    if not fecha_desde or not fecha_hasta:
-        return JSONResponse({"mensaje": "Formato de fecha inválido. Use YYYY-MM-DD o DD/MM/YYYY."},
-                            status_code=400)
+    # Obtener el número del usuario desde la cookie (login)
+    usuario_celular = request.cookies.get("usuario_celular", "")
+    if not usuario_celular:
+        return {"error": "Usuario no autenticado"}
 
-    from_ts = int(fecha_desde.timestamp())
-    to_ts = int(fecha_hasta.timestamp())
-       
+    # Normalizar número del usuario
+    usuario_celular = usuario_celular.replace("-", "").replace(" ", "").strip()
 
-    # Buscar mensajes del chat
+    # Convertir fechas
+    try:
+        fecha_desde = datetime.strptime(desde, "%Y-%m-%d")
+        fecha_hasta = datetime.strptime(hasta, "%Y-%m-%d")
+    except:
+        return {"error": "Formato de fecha inválido"}
+
+    # Obtener mensajes del chat
     conn = get_conn()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor()
     cur.execute("""
-        SELECT message_id, chat_name, sender_name, ts, text, local_path
-        FROM messages
-        WHERE chat_name ILIKE %s
-        AND ts BETWEEN %s AND %s
-        ORDER BY ts ASC;
-    """, (f"%{chat}%", from_ts, to_ts))
-
+        SELECT fecha, mensaje
+        FROM mensajes
+        WHERE chat = %s
+        ORDER BY fecha ASC
+    """, (chat,))
     rows = cur.fetchall()
     cur.close()
     conn.close()
 
-    if not rows:
-        return JSONResponse({"mensaje": "No se encontraron mensajes para ese chat en ese rango de fechas."},
-                            status_code=404)
-
-    # Reparar UTF‑8
-    for msg in rows:
-        msg["text"] = reparar_utf8(msg["text"])
-
-    # Detectar pagos móviles por texto
-    pagos = [msg for msg in rows if es_pago_movil(msg["text"])]
-
-    if not pagos:
-        return JSONResponse({"mensaje": "No se detectaron pagos móviles en ese rango de fechas."},
-                            status_code=404)
-
     resultados = []
 
-    for p in pagos:
+    # --- EXTRACTORES ROBUSTOS ---
 
-        # Extraer teléfono del mensaje original
-       def extraer_telefono(texto):
-            # Normalizar texto del OCR
-            texto = texto.replace(" ", "").replace("\n", "")
-        
-            # Prefijos válidos de líneas móviles venezolanas
-            prefijos = ["0414", "0416", "0424", "0426"]
-        
-            # Buscar números con o sin guión
-            patrones = [
-                r"(04\d{2}-\d{7})",  # con guión
-                r"(04\d{9})"         # sin guión (Bancamiga, BDV a veces)
-            ]
-        
-            for p in patrones:
-                encontrados = re.findall(p, texto)
-                if encontrados:
-                    # Filtrar por prefijo válido
-                    for numero in encontrados:
-                        limpio = numero.replace("-", "")
-                        if limpio[:4] in prefijos:
-                            return numero
-        
-            return ""
+    def extraer_telefono(texto):
+        texto = texto.replace(" ", "").replace("\n", "")
 
+        prefijos = ["0414", "0416", "0424", "0426"]
 
-        # Validar que realmente es un teléfono (11 dígitos)
-        # if len(telefono_limpio) != 11:
-            # continue
+        patrones = [
+            r"(04\d{2}-\d{7})",  # con guión
+            r"(04\d{9})"         # sin guión
+        ]
 
-        # Determinar si es entrante o saliente
-        tipo_pago = "Entrante" if telefono_limpio == MI_TELEFONO_LIMPIO else "Saliente"
+        for p in patrones:
+            encontrados = re.findall(p, texto)
+            if encontrados:
+                for numero in encontrados:
+                    limpio = numero.replace("-", "")
+                    if limpio[:4] in prefijos:
+                        return numero
+        return ""
 
-        # OCR real si existe imagen
-        datos = None
-        if p["local_path"]:
-            try:
-                with open(p["local_path"], "rb") as img_file:
-                    contenido = img_file.read()
+    def extraer_monto(texto):
+        m = re.search(r"Bs\.?\s*([\d\.,]+)", texto)
+        if m:
+            return m.group(1)
+        return ""
 
-                respuesta = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "input_image", "image": contenido},
-                                {"type": "text", "text": "Extrae fecha, monto, banco, referencia y concepto del pago móvil."}
-                            ]
-                        }
-                    ]
-                )
+    def extraer_operacion(texto):
+        m = re.search(r"REFERENCIA[: ]+(\d+)", texto)
+        if m:
+            return m.group(1)
+        return ""
 
-                texto_ocr = respuesta.choices[0].message["content"]
+    def extraer_banco(texto):
+        m = re.search(r"BANCO[: ]+([A-Za-z ]+)", texto)
+        if m:
+            return m.group(1).strip()
+        return ""
 
-                datos = {
-                    "fecha": re.search(r"(\d{2}/\d{2}/\d{4})", texto_ocr).group(1)
-                             if re.search(r"(\d{2}/\d{2}/\d{4})", texto_ocr) else "",
-                    "operacion": re.search(r"(\d{6,12})", texto_ocr).group(1)
-                                 if re.search(r"(\d{6,12})", texto_ocr) else "",
-                    "monto": re.search(r"([\d\.]+,\d{2})", texto_ocr).group(1)
-                             if re.search(r"([\d\.]+,\d{2})", texto_ocr) else "",
-                    "banco": re.search(r"(Banesco|BDV|Bancamiga|Banco de Venezuela|Provincial|Mercantil)",
-                                      texto_ocr, re.IGNORECASE).group(1)
-                             if re.search(r"(Banesco|BDV|Bancamiga|Banco de Venezuela|Provincial|Mercantil)",
-                                          texto_ocr, re.IGNORECASE) else "",
-                    "concepto": re.search(r"(servicios|pago por|pago hecho|transferencia|compra|venta)",
-                                         texto_ocr, re.IGNORECASE).group(1)
-                                if re.search(r"(servicios|pago por|pago hecho|transferencia|compra|venta)",
-                                             texto_ocr, re.IGNORECASE) else ""
-                }
+    def extraer_concepto(texto):
+        m = re.search(r"CONCEPTO[: ]+(.+)", texto)
+        if m:
+            return m.group(1).strip()
+        return ""
 
-            except Exception:
-                datos = extraer_datos_soporte(p["local_path"])
+    # --- PROCESAR MENSAJES ---
+    for fecha, mensaje in rows:
 
-        else:
-            datos = extraer_datos_soporte(p["local_path"])
+        if not (fecha_desde <= fecha <= fecha_hasta):
+            continue
 
-        # Datos del soporte
-        fecha = datos["fecha"].split(" ")[0] if datos["fecha"] else ""
-        operacion = datos["operacion"] or ""
-        monto_str = datos["monto"].replace(".", "").replace(",", "") if datos["monto"] else ""
-        monto = int(monto_str) // 100 if monto_str else ""
-        banco = datos.get("banco", "")
-        concepto = datos.get("concepto", "")
+        telefono = extraer_telefono(mensaje)
+        monto = extraer_monto(mensaje)
 
-        # Solo agregar si está completo
-        if fecha and operacion and telefono and monto:
-            resultados.append({
-                "fecha": fecha,
-                "operacion": operacion,
-                "telefono": telefono,
-                "monto": monto,
-                "banco": banco,
-                "concepto": concepto,
-                "tipo_pago": tipo_pago
-            })
-
-    if not resultados:
-        return JSONResponse({"mensaje": "No se generaron datos completos."},
-                            status_code=404)
-
-    return resultados
 
 
 @app.get("/pagos", response_class=HTMLResponse)
