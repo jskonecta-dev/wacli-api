@@ -783,6 +783,23 @@ def buscar_avanzado(
 def descargar_csv():
     return FileResponse("auditoria.csv", media_type="text/csv", filename="auditoria.csv")
 
+@app.get("/debug_imagenes")
+def debug_imagenes(chat: str):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT COUNT(*)
+        FROM mensajes
+        WHERE chat_name = %s AND local_path IS NOT NULL
+    """, (chat,))
+
+    cantidad = cur.fetchone()[0]
+
+    cur.close()
+    conn.close()
+
+    return {"chat": chat, "capturas": cantidad}
 
 
 
