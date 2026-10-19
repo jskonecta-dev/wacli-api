@@ -243,21 +243,30 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
 
     for p in pagos:
 
-        
-        # Extraer teléfono del mensaje original
-       
-        telefono = re.findall(r"04\d{9}", p["text"])  # detecta números sin guión (la mayoría)
-        if not telefono:
-            telefono = re.findall(r"04\d{2}-?\d{7}", p["text"])  # detecta con guión
-        
-        telefono = telefono[0] if telefono else ""
-        telefono_limpio = telefono.replace("-", "").strip()
-
-       
-        
-        # Validar que realmente es un teléfono (11 dígitos)
-        if len(telefono_limpio) != 11:
-            continue
+        def extraer_telefono(texto):
+        # Limpieza mínima para evitar romper el formato
+        texto = texto.replace(" ", "").replace("\n", "").replace(" ", " ")
+    
+        # Prefijos válidos de líneas móviles venezolanas
+        prefijos = ["0414", "0416", "0424", "0426"]
+    
+        # Patrones para números con y sin guión
+        patrones = [
+            r"(04\d{2}-\d{7})",  # con guión
+            r"(04\d{9})"         # sin guión (la mayoría de los bancos)
+        ]
+    
+        for p in patrones:
+            encontrados = re.findall(p, texto)
+            if encontrados:
+                for numero in encontrados:
+                    limpio = numero.replace("-", "")
+                    if limpio[:4] in prefijos:
+                        return numero
+    
+        return ""
+  
+      
 
         # Determinar si es entrante o saliente
         tipo_pago = "Entrante" if telefono_limpio == MI_TELEFONO_LIMPIO else "Saliente"
@@ -298,8 +307,13 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
                     "concepto": re.search(r"(servicios|pago por|pago hecho|transferencia|compra|venta)",
                                          texto_ocr, re.IGNORECASE).group(1)
                                 if re.search(r"(servicios|pago por|pago hecho|transferencia|compra|venta)",
-                                             texto_ocr, re.IGNORECASE) else ""
+                                             texto_ocr, re.IGNORECASE) else "",
+                    "telefono": re.search(r"(04\d{9})", texto_ocr).group(1)
+                                if re.search(r"(04\d{9})", texto_ocr) else ""
                 }
+
+                
+     
 
             except Exception:
                 datos = extraer_datos_soporte(p["local_path"])
@@ -381,15 +395,18 @@ def pagomovil_json(request: Request, chat: str, desde: str, hasta: str):
     # --- EXTRACTORES ROBUSTOS ---
 
     def extraer_telefono(texto):
-        texto = texto.replace(" ", "").replace("\n", "")
-
+        # Limpieza mínima para evitar romper el formato
+        texto = texto.replace(" ", "").replace("\n", "").replace(" ", " ")
+    
+        # Prefijos válidos de líneas móviles venezolanas
         prefijos = ["0414", "0416", "0424", "0426"]
-
+    
+        # Patrones para números con y sin guión
         patrones = [
             r"(04\d{2}-\d{7})",  # con guión
-            r"(04\d{9})"         # sin guión
+            r"(04\d{9})"         # sin guión (la mayoría de los bancos)
         ]
-
+    
         for p in patrones:
             encontrados = re.findall(p, texto)
             if encontrados:
@@ -397,8 +414,11 @@ def pagomovil_json(request: Request, chat: str, desde: str, hasta: str):
                     limpio = numero.replace("-", "")
                     if limpio[:4] in prefijos:
                         return numero
+    
         return ""
 
+    
+   
     def extraer_monto(texto):
         m = re.search(r"Bs\.?\s*([\d\.,]+)", texto)
         if m:
