@@ -784,22 +784,46 @@ def descargar_csv():
     return FileResponse("auditoria.csv", media_type="text/csv", filename="auditoria.csv")
 
 @app.get("/debug_imagenes")
-def debug_imagenes(chat: str):
-    conn = get_conn()
-    cur = conn.cursor()
+def debug_imagenes(chat: str = None):
+    try:
+        if not chat:
+            return {"error": "Debes enviar ?chat=NombreDelChat"}
 
-    cur.execute("""
-        SELECT COUNT(*)
-        FROM mensajes
-        WHERE chat_name = %s AND local_path IS NOT NULL
-    """, (chat,))
+        conn = get_conn()
+        cur = conn.cursor()
 
-    cantidad = cur.fetchone()[0]
+        # Verificar si las columnas existen
+        cur.execute("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'mensajes'
+        """)
+        columnas = [c[0] for c in cur.fetchall()]
 
-    cur.close()
-    conn.close()
+        # Respuesta si falta alguna columna
+        if "local_path" not in columnas:
+            return {"error": "La columna local_path NO existe en la tabla mensajes", "columnas": columnas}
 
-    return {"chat": chat, "capturas": cantidad}
+        if "chat_name" not in columnas:
+            return {"error": "La columna chat_name NO existe en la tabla mensajes", "columnas": columnas}
+
+        # Contar imágenes
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM mensajes
+            WHERE chat_name = %s AND local_path IS NOT NULL
+        """, (chat,))
+
+        cantidad = cur.fetchone()[0]
+
+        cur.close()
+        conn.close()
+
+        return {"chat": chat, "capturas": cantidad}
+
+    except Exception as e:
+        return {"error": str(e)}
+
 
 
 
