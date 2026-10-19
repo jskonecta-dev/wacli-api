@@ -245,9 +245,14 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
 
         
         # Extraer teléfono del mensaje original
-        telefono = re.findall(r"04\d{9}", p["text"])
+       
+        telefono = re.findall(r"04\d{9}", p["text"])  # detecta números sin guión (la mayoría)
+        if not telefono:
+            telefono = re.findall(r"04\d{2}-?\d{7}", p["text"])  # detecta con guión
+        
         telefono = telefono[0] if telefono else ""
         telefono_limpio = telefono.replace("-", "").strip()
+
        
         
         # Validar que realmente es un teléfono (11 dígitos)
