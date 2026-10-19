@@ -244,27 +244,27 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
     for p in pagos:
 
         def extraer_telefono(texto):
-        # Limpieza mínima para evitar romper el formato
-        texto = texto.replace(" ", "").replace("\n", "").replace(" ", " ")
-    
-        # Prefijos válidos de líneas móviles venezolanas
-        prefijos = ["0414", "0416", "0424", "0426"]
-    
-        # Patrones para números con y sin guión
-        patrones = [
-            r"(04\d{2}-\d{7})",  # con guión
-            r"(04\d{9})"         # sin guión (la mayoría de los bancos)
-        ]
-    
-        for p in patrones:
-            encontrados = re.findall(p, texto)
-            if encontrados:
-                for numero in encontrados:
-                    limpio = numero.replace("-", "")
-                    if limpio[:4] in prefijos:
-                        return numero
-    
-        return ""
+            # Limpieza mínima para evitar romper el formato
+            texto = texto.replace(" ", "").replace("\n", "").replace(" ", " ")
+        
+            # Prefijos válidos de líneas móviles venezolanas
+            prefijos = ["0414", "0416", "0424", "0426"]
+        
+            # Patrones para números con y sin guión
+            patrones = [
+                r"(04\d{2}-\d{7})",  # con guión
+                r"(04\d{9})"         # sin guión (la mayoría de los bancos)
+            ]
+        
+            for p in patrones:
+                encontrados = re.findall(p, texto)
+                if encontrados:
+                    for numero in encontrados:
+                        limpio = numero.replace("-", "")
+                        if limpio[:4] in prefijos:
+                            return numero
+        
+            return ""
   
       
 
