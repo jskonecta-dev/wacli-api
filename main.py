@@ -826,17 +826,22 @@ def debug_imagenes(chat: str = None):
 
     @app.get("/debug_tablas")
     def debug_tablas():
-        conn = get_conn()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT table_name
-            FROM information_schema.tables
-            WHERE table_schema='public'
-        """)
-        tablas = [t[0] for t in cur.fetchall()]
-        cur.close()
-        conn.close()
-        return {"tablas": tablas}
+        try:
+            conn = get_conn()
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema='public'
+            """)
+            tablas = [t[0] for t in cur.fetchall()]
+            cur.close()
+            conn.close()
+            return {"tablas": tablas}
+        except Exception as e:
+            return {"error": str(e)}
 
+    
+    
 
 
