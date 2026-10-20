@@ -75,60 +75,81 @@ def reparar_utf8(texto):
 def es_pago_movil(texto: str):
     if not texto:
         return False
+
     texto = texto.lower()
+
+    # Palabras clave reales de comprobantes venezolanos
     claves = [
-        "pago", "pago movil", "pago móvil", "movil", "móvil", "pm",
-        "bdv", "banesco", "bancamiga", "provincial", "mercantil", "venezuela",
-        "transferencia", "transferido", "te envié", "te envie", "te mandé",
-        "servicios", "pago por", "pago hecho", "ahí va", "ahi va"
+        "pago movil", "pago móvil", "pagomovil", "pago por móvil",
+        "transferencia móvil", "transferencia", "transferido",
+        "pago hecho", "pago por", "pago listo", "pago recibido",
+        "ref", "referencia", "bs", "bolívares",
+        "bdv", "banesco", "bancamiga", "provincial", "mercantil",
+        "te envié", "te envie", "te mandé", "te mande",
+        "servicios", "ahí va", "ahi va"
     ]
+
     return any(c in texto for c in claves)
 
 # -----------------------------
-# OCR SIMULADO PARA SOPORTE
+# OCR REAL PARA COMPROBANTES
 # -----------------------------
 def extraer_datos_soporte(local_path):
-    return {
-        "fecha": "21/09/2026 09:37 am",
-        "banco": "Banco de Venezuela",
-        "monto": "50.000,00",
-        "operacion": "093730929909",
-        "mensaje": "servicios",
-        "imagen": local_path
-    }
+    """
+    Extrae datos reales desde una captura de pago móvil usando OCR.
+    """
+    try:
+        img = Image.open(local_path)
+        texto = pytesseract.image_to_string(img)
 
-# -----------------------------
-# OCR REAL
-# -----------------------------
-@app.post("/pagomovil_ocr")
-async def pagomovil_ocr(imagen: UploadFile = File(...)):
-    contenido = await imagen.read()
-    respuesta = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "input_image", "image": contenido},
-                    {"type": "text", "text": "Extrae fecha, monto, banco, referencia y concepto del pago móvil."}
-                ]
-            }
-        ]
-    )
-    texto = respuesta.choices[0].message["content"]
+        # Normalizamos texto
+        t = texto.lower()
 
-    fecha = re.search(r"(\d{2}/\d{2}/\d{4})", texto)
-    monto = re.search(r"([\d\.]+,\d{2})", texto)
-    banco = re.search(r"(Banesco|BDV|Bancamiga|Banco de Venezuela)", texto, re.IGNORECASE)
-    referencia = re.search(r"(\d{6,12})", texto)
+        # Teléfono venezolano
+        telefono = ""
+        m = re.search(r"(04\d{9})", t)
+        if m:
+            telefono = m.group(1)
 
-    return {
-        "fecha": fecha.group(1) if fecha else "no detectado",
-        "monto": monto.group(1) if monto else "no detectado",
-        "banco": banco.group(1) if banco else "no detectado",
-        "referencia": referencia.group(1) if referencia else "no detectado",
-        "motivo": "Pago móvil detectado por OCR"
-    }
+        # Monto venezolano: 50.000,00
+        monto = ""
+        m = re.search(r"(\d{1,3}(?:\.\d{3})*,\d{2})", t)
+        if m:
+            monto = m.group(1)
+
+        # Referencia: 093730929909
+        referencia = ""
+        m = re.search(r"(ref\.?\s*\d+|\b\d{6,14}\b)", t)
+        if m:
+            referencia = m.group(1).replace("ref", "").replace(".", "").strip()
+
+        # Banco
+        banco = ""
+        bancos = ["venezuela", "banesco", "mercantil", "provincial", "bancamiga", "bod"]
+        for b in bancos:
+            if b in t:
+                banco = b.capitalize()
+                break
+
+        return {
+            "telefono": telefono,
+            "monto": monto,
+            "referencia": referencia,
+            "banco": banco,
+            "texto_ocr": texto,
+            "imagen": local_path
+        }
+
+    except Exception as e:
+        return {
+            "telefono": "",
+            "monto": "",
+            "referencia": "",
+            "banco": "",
+            "texto_ocr": "",
+            "imagen": local_path
+        }
+
 
 # -----------------------------
 # SELECCIONAR CHAT
@@ -188,7 +209,7 @@ MI_TELEFONO_LIMPIO = MI_TELEFONO.replace("-", "").strip()
 
 
 # -----------------------------
-# NUEVO CSV LIMPIO + ENTRANTE/SALIENTE + BANCO + CONCEPTO
+# PAGOMOVIL CSV — VERSIÓN CORREGIDA
 # -----------------------------
 @app.get("/pagomovil_csv")
 def pagomovil_csv(chat: str, desde: str, hasta: str):
@@ -198,8 +219,10 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
         fecha_desde = datetime.fromisoformat(desde)
         fecha_hasta = datetime.fromisoformat(hasta)
     except:
-        return JSONResponse({"mensaje": "Formato de fecha inválido. Use YYYY-MM-DD."},
-                            status_code=400)
+        return JSONResponse(
+            {"mensaje": "Formato de fecha inválido. Use YYYY-MM-DD."},
+            status_code=400
+        )
 
     from_ts = int(fecha_desde.timestamp())
     to_ts = int(fecha_hasta.timestamp())
@@ -208,7 +231,7 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
     conn = get_conn()
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("""
-        SELECT message_id, chat_name, sender_name, ts, text, local_path
+        SELECT ts, text, local_path
         FROM messages
         WHERE chat_name ILIKE %s
         AND ts BETWEEN %s AND %s
@@ -220,145 +243,65 @@ def pagomovil_csv(chat: str, desde: str, hasta: str):
     conn.close()
 
     if not rows:
-        return JSONResponse({"mensaje": "No se encontraron mensajes para ese chat en ese rango de fechas."},
-                            status_code=404)
+        return JSONResponse(
+            {"mensaje": "No se encontraron mensajes para ese chat en ese rango de fechas."},
+            status_code=404
+        )
 
     # Reparar UTF‑8
     for msg in rows:
         msg["text"] = reparar_utf8(msg["text"])
 
-    # Detectar pagos móviles por texto
+    # Detectar pagos móviles
     pagos = [msg for msg in rows if es_pago_movil(msg["text"])]
 
     if not pagos:
-        return JSONResponse({"mensaje": "No se detectaron pagos móviles en ese rango de fechas."},
-                            status_code=404)
+        return JSONResponse(
+            {"mensaje": "No se detectaron pagos móviles en ese rango de fechas."},
+            status_code=404
+        )
 
     # Crear CSV
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["Fecha", "Operacion", "Telefono", "Monto", "Banco", "Concepto", "TipoPago"])
 
-    filas_validas = 0
-
     for p in pagos:
 
-        def extraer_telefono(texto):
-            # Limpieza mínima para evitar romper el formato
-            texto = texto.replace(" ", "").replace("\n", "").replace(" ", " ")
-        
-            # Prefijos válidos de líneas móviles venezolanas
-            prefijos = ["0414", "0416", "0424", "0426"]
-        
-            # Patrones para números con y sin guión
-            patrones = [
-                r"(04\d{2}-\d{7})",  # con guión
-                r"(04\d{9})"         # sin guión (la mayoría de los bancos)
-            ]
-        
-            for p in patrones:
-                encontrados = re.findall(p, texto)
-                if encontrados:
-                    for numero in encontrados:
-                        limpio = numero.replace("-", "")
-                        if limpio[:4] in prefijos:
-                            return numero
-        
-            return ""
-  
-      
+        texto = p["text"]
+        telefono = extraer_telefono(texto)
 
         # Determinar si es entrante o saliente
+        telefono_limpio = telefono.replace("-", "")
         tipo_pago = "Entrante" if telefono_limpio == MI_TELEFONO_LIMPIO else "Saliente"
 
-        # OCR real si existe imagen
-        datos = None
+        # OCR si hay imagen
         if p["local_path"]:
-            try:
-                with open(p["local_path"], "rb") as img_file:
-                    contenido = img_file.read()
-
-                respuesta = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "input_image", "image": contenido},
-                                {"type": "text", "text": "Extrae fecha, monto, banco, referencia y concepto del pago móvil."}
-                            ]
-                        }
-                    ]
-                )
-
-                texto_ocr = respuesta.choices[0].message["content"]
-
-                datos = {
-                    "fecha": re.search(r"(\d{2}/\d{2}/\d{4})", texto_ocr).group(1)
-                             if re.search(r"(\d{2}/\d{2}/\d{4})", texto_ocr) else "",
-                    "operacion": re.search(r"(\d{6,12})", texto_ocr).group(1)
-                                 if re.search(r"(\d{6,12})", texto_ocr) else "",
-                    "monto": re.search(r"([\d\.]+,\d{2})", texto_ocr).group(1)
-                             if re.search(r"([\d\.]+,\d{2})", texto_ocr) else "",
-                    "banco": re.search(r"(Banesco|BDV|Bancamiga|Banco de Venezuela|Provincial|Mercantil)",
-                                      texto_ocr, re.IGNORECASE).group(1)
-                             if re.search(r"(Banesco|BDV|Bancamiga|Banco de Venezuela|Provincial|Mercantil)",
-                                          texto_ocr, re.IGNORECASE) else "",
-                    "concepto": re.search(r"(servicios|pago por|pago hecho|transferencia|compra|venta)",
-                                         texto_ocr, re.IGNORECASE).group(1)
-                                if re.search(r"(servicios|pago por|pago hecho|transferencia|compra|venta)",
-                                             texto_ocr, re.IGNORECASE) else "",
-                    "telefono": re.search(r"(04\d{9})", texto_ocr).group(1)
-                                if re.search(r"(04\d{9})", texto_ocr) else ""
-                }
-
-                
-     
-
-            except Exception:
-                datos = extraer_datos_soporte(p["local_path"])
-
-        else:
             datos = extraer_datos_soporte(p["local_path"])
+        else:
+            datos = extraer_datos_soporte(None)
 
-        # Datos del soporte
-        fecha = datos["fecha"].split(" ")[0] if datos["fecha"] else ""
-        operacion = datos["operacion"] or ""
-        #monto = datos["monto"].replace(".", "").replace(",", "") if datos["monto"] else ""
-        monto_str = datos["monto"].replace(".", "").replace(",", "") if datos["monto"] else ""
-        monto = int(monto_str) // 100 if monto_str else ""
-        banco = datos.get("banco", "")
+        # Fecha desde ts
+        fecha = datetime.fromtimestamp(p["ts"]).strftime("%Y-%m-%d")
+
+        operacion = datos["referencia"]
+        monto = datos["monto"]
+        banco = datos["banco"]
         concepto = datos.get("concepto", "")
 
         # Solo imprimir si está completo
         if fecha and operacion and telefono and monto:
             writer.writerow([fecha, operacion, telefono, monto, banco, concepto, tipo_pago])
-            filas_validas += 1
-
-    if filas_validas == 0:
-        return JSONResponse({"mensaje": "No se generó el CSV porque no se encontraron datos completos."},
-                            status_code=404)
 
     csv_data = output.getvalue()
 
     return PlainTextResponse(csv_data, media_type="text/plain")
 
-def parse_fecha(fecha_str):
-    # Intenta YYYY-MM-DD
-    try:
-        return datetime.fromisoformat(fecha_str)
-    except:
-        pass
-
-    # Intenta DD/MM/YYYY
-    try:
-        return datetime.strptime(fecha_str, "%d/%m/%Y")
-    except:
-        pass
-
-    return None
 
 
+# -----------------------------
+# PAGOMOVIL JSON — VERSIÓN CORREGIDA
+# -----------------------------
 @app.get("/pagomovil_json")
 def pagomovil_json(request: Request, chat: str, desde: str, hasta: str):
 
@@ -367,7 +310,6 @@ def pagomovil_json(request: Request, chat: str, desde: str, hasta: str):
     if not usuario_celular:
         return {"error": "Usuario no autenticado"}
 
-    # Normalizar número del usuario
     usuario_celular = usuario_celular.replace("-", "").replace(" ", "").strip()
 
     # Convertir fechas
@@ -377,80 +319,66 @@ def pagomovil_json(request: Request, chat: str, desde: str, hasta: str):
     except:
         return {"error": "Formato de fecha inválido"}
 
-    # Obtener mensajes del chat
+    from_ts = int(fecha_desde.timestamp())
+    to_ts = int(fecha_hasta.timestamp())
+
+    # Obtener mensajes reales desde la tabla REAL "messages"
     conn = get_conn()
     cur = conn.cursor()
     cur.execute("""
-        SELECT fecha, mensaje
-        FROM mensajes
-        WHERE chat = %s
-        ORDER BY fecha ASC
-    """, (chat,))
+        SELECT ts, text, local_path
+        FROM messages
+        WHERE chat_name = %s
+        AND ts BETWEEN %s AND %s
+        ORDER BY ts ASC
+    """, (chat, from_ts, to_ts))
     rows = cur.fetchall()
     cur.close()
     conn.close()
 
     resultados = []
 
-    # --- EXTRACTORES ROBUSTOS ---
-
-    def extraer_telefono(texto):
-        # Limpieza mínima para evitar romper el formato
-        texto = texto.replace(" ", "").replace("\n", "").replace(" ", " ")
-    
-        # Prefijos válidos de líneas móviles venezolanas
-        prefijos = ["0414", "0416", "0424", "0426"]
-    
-        # Patrones para números con y sin guión
-        patrones = [
-            r"(04\d{2}-\d{7})",  # con guión
-            r"(04\d{9})"         # sin guión (la mayoría de los bancos)
-        ]
-    
-        for p in patrones:
-            encontrados = re.findall(p, texto)
-            if encontrados:
-                for numero in encontrados:
-                    limpio = numero.replace("-", "")
-                    if limpio[:4] in prefijos:
-                        return numero
-    
-        return ""
-
-    
-   
-    def extraer_monto(texto):
-        m = re.search(r"Bs\.?\s*([\d\.,]+)", texto)
-        if m:
-            return m.group(1)
-        return ""
-
-    def extraer_operacion(texto):
-        m = re.search(r"REFERENCIA[: ]+(\d+)", texto)
-        if m:
-            return m.group(1)
-        return ""
-
-    def extraer_banco(texto):
-        m = re.search(r"BANCO[: ]+([A-Za-z ]+)", texto)
-        if m:
-            return m.group(1).strip()
-        return ""
-
-    def extraer_concepto(texto):
-        m = re.search(r"CONCEPTO[: ]+(.+)", texto)
-        if m:
-            return m.group(1).strip()
-        return ""
-
     # --- PROCESAR MENSAJES ---
-    for fecha, mensaje in rows:
+    for ts, mensaje, local_path in rows:
 
-        if not (fecha_desde <= fecha <= fecha_hasta):
-            continue
+        # Fecha desde UNIX → YYYY-MM-DD
+        fecha = datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
 
+        # Extraer datos desde texto
         telefono = extraer_telefono(mensaje)
         monto = extraer_monto(mensaje)
+        operacion = extraer_operacion(mensaje)
+        banco = extraer_banco(mensaje)
+        concepto = extraer_concepto(mensaje)
+
+        # OCR si hay imagen
+        if local_path:
+            datos = extraer_datos_soporte(local_path)
+
+            telefono = telefono or datos["telefono"]
+            monto = monto or datos["monto"]
+            operacion = operacion or datos["referencia"]
+            banco = banco or datos["banco"]
+            concepto = concepto or datos.get("concepto", "")
+
+        # Clasificación Entrante / Saliente
+        telefono_limpio = telefono.replace("-", "").strip()
+        tipo_pago = "Entrante" if telefono_limpio == usuario_celular else "Saliente"
+
+        resultados.append({
+            "fecha": fecha,
+            "operacion": operacion,
+            "telefono": telefono,
+            "monto": monto,
+            "banco": banco,
+            "concepto": concepto,
+            "tipo_pago": tipo_pago,
+            "texto": mensaje,
+            "imagen": bool(local_path)
+        })
+
+    return resultados
+
 
 
 
@@ -784,7 +712,7 @@ def descargar_csv():
     return FileResponse("auditoria.csv", media_type="text/csv", filename="auditoria.csv")
 
 @app.get("/debug_imagenes")
-def debug_imagenes(chat: str = None):
+def debug_imagenes(chat: str):
     try:
         if not chat:
             return {"error": "Debes enviar ?chat=NombreDelChat"}
@@ -792,37 +720,27 @@ def debug_imagenes(chat: str = None):
         conn = get_conn()
         cur = conn.cursor()
 
-        # Verificar si las columnas existen
-        cur.execute("""
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_name = 'mensajes'
-        """)
-        columnas = [c[0] for c in cur.fetchall()]
-
-        # Respuesta si falta alguna columna
-        if "local_path" not in columnas:
-            return {"error": "La columna local_path NO existe en la tabla mensajes", "columnas": columnas}
-
-        if "chat_name" not in columnas:
-            return {"error": "La columna chat_name NO existe en la tabla mensajes", "columnas": columnas}
-
-        # Contar imágenes
+        # Contar imágenes reales en la tabla correcta
         cur.execute("""
             SELECT COUNT(*)
-            FROM mensajes
-            WHERE chat_name = %s AND local_path IS NOT NULL
-        """, (chat,))
+            FROM messages
+            WHERE chat_name ILIKE %s
+            AND local_path IS NOT NULL
+        """, (f"%{chat}%",))
 
         cantidad = cur.fetchone()[0]
 
         cur.close()
         conn.close()
 
-        return {"chat": chat, "capturas": cantidad}
+        return {
+            "chat": chat,
+            "capturas": cantidad
+        }
 
     except Exception as e:
         return {"error": str(e)}
+
 
 @app.get("/debug_tablas")
 def debug_tablas():
