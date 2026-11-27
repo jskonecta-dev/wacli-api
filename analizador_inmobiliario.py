@@ -43,7 +43,11 @@ def ejecutar_analizador():
         # Extraer monto
         monto = None
         
-        m = re.search(r'(\d{4,7})', texto)
+        
+        m = re.search(
+            r'(\d{5,7})\s*(usd|dolares|dólares)?',
+            texto
+        )
         
         if m:
             monto = float(m.group(1))
