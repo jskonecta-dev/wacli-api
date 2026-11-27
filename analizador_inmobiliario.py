@@ -68,6 +68,22 @@ def ejecutar_analizador():
             if c in texto:
                 ciudad = c.title()
                 break
+        tipo_inmueble = None
+        
+        if "apartamento" in texto:
+            tipo_inmueble = "APARTAMENTO"
+        
+        elif "casa" in texto:
+            tipo_inmueble = "CASA"
+        
+        elif "local" in texto:
+            tipo_inmueble = "LOCAL"
+        
+        elif "terreno" in texto:
+            tipo_inmueble = "TERRENO"
+        
+        elif "oficina" in texto:
+            tipo_inmueble = "OFICINA"
 
 
 
@@ -94,11 +110,12 @@ def ejecutar_analizador():
                 sender_name,
                 tipo,
                 descripcion,
+                tipo_inmueble,
                 ciudad,
                 habitaciones,
                 monto
             )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """,
             (
                 msg[0],         # message_id
