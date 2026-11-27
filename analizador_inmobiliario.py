@@ -158,7 +158,9 @@ def ejecutar_analizador():
 
     cur.close()
     conn.close()
-
+    print(
+        f"tipo={tipo}, inmueble={tipo_inmueble}, ciudad={ciudad}, texto={texto}"
+    )
     return {
         "mensajes_leidos": len(mensajes),
         "oportunidades_creadas": contador
