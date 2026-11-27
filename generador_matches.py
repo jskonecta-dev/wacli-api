@@ -44,8 +44,24 @@ def generar_matches():
 
             texto_vendo = vendo[1].lower()
 
-            if "doral" in texto_busco and "doral" in texto_vendo:
+            score = 0
 
+            if ciudad_busco and ciudad_vendo:
+                if ciudad_busco == ciudad_vendo:
+                    score += 50
+            
+            if habitaciones_busco and habitaciones_vendo:
+                if habitaciones_busco == habitaciones_vendo:
+                    score += 30
+            
+            if monto_busco and monto_vendo:
+                diferencia = abs(monto_busco - monto_vendo)
+            
+                if diferencia < 50000:
+                    score += 20
+            
+            if score >= 50:
+    crear_match()
                 cur.execute("""
                 INSERT INTO matches
                 (
