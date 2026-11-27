@@ -68,7 +68,7 @@ def ejecutar_analizador():
             if c in texto:
                 ciudad = c.title()
                 break
-        tipo_inmueble = None
+            tipo_inmueble = None
         
         if "apartamento" in texto:
             tipo_inmueble = "APARTAMENTO"
