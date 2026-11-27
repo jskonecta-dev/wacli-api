@@ -15,16 +15,32 @@ def ejecutar_analizador():
     cur = conn.cursor()
 
     cur.execute("""
-        SELECT COUNT(*)
+        SELECT
+            message_id,
+            chat_name,
+            sender_name,
+            text
         FROM messages
+        ORDER BY message_id DESC
+        LIMIT 5
     """)
 
-    total = cur.fetchone()[0]
+    mensajes = cur.fetchall()
 
     cur.close()
     conn.close()
 
+    resultado = []
+
+    for msg in mensajes:
+
+        resultado.append({
+            "message_id": msg[0],
+            "chat": msg[1],
+            "sender": msg[2],
+            "texto": msg[3]
+        })
+
     return {
-        "mensaje": "Conexion Neon OK",
-        "mensajes": total
+        "mensajes": resultado
     }
