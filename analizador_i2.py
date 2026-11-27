@@ -113,3 +113,4 @@ def ejecutar_analizador():
     return {
         "oportunidades_detectadas": resultado
     }
+    
