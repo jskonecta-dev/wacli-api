@@ -17,6 +17,7 @@ from PIL import Image
 import csv
 import io
 from analizador_inmobiliario import ejecutar_analizador
+from generador_matches import generar_matches
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 app = FastAPI()
@@ -166,6 +167,12 @@ def extraer_banco(texto):
         if b in texto.lower():
             return b.capitalize()
     return ""
+# -----------------------------
+# encuentra matches inmobiliarios
+# -----------------------------
+@app.get("/debug_matches")
+def debug_matches():
+    return generar_matches()
 # -----------------------------
 # debug analizador inmobiliario
 # -----------------------------
