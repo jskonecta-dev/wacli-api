@@ -120,35 +120,35 @@ def ejecutar_analizador():
         print(
             f"tipo={tipo}, inmueble={tipo_inmueble}, ciudad={ciudad}, texto={texto}"
         )
-            if tipo and es_inmobiliario:
-            cur.execute("""
-            INSERT INTO oportunidades
-            (
-                message_id,
-                chat_name,
-                sender_name,
-                tipo,
-                descripcion,
-                tipo_inmueble,
-                ciudad,
-                habitaciones,
-                monto
-            )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            """,
-            (
-                msg[0],         # message_id
-                msg[1],         # chat_name
-                msg[2],         # sender_name
-                tipo,
-                msg[3],         # descripcion
-                tipo_inmueble,
-                ciudad,
-                habitaciones,
-                monto
-            ))
+        if tipo and es_inmobiliario:
+        cur.execute("""
+        INSERT INTO oportunidades
+        (
+            message_id,
+            chat_name,
+            sender_name,
+            tipo,
+            descripcion,
+            tipo_inmueble,
+            ciudad,
+            habitaciones,
+            monto
+        )
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """,
+        (
+            msg[0],         # message_id
+            msg[1],         # chat_name
+            msg[2],         # sender_name
+            tipo,
+            msg[3],         # descripcion
+            tipo_inmueble,
+            ciudad,
+            habitaciones,
+            monto
+        ))
 
-            contador += 1
+        contador += 1
 
         cur.execute("""
         UPDATE messages
