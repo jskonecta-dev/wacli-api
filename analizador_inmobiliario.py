@@ -118,9 +118,10 @@ def ejecutar_analizador():
         elif re.search(r'\bcompro\b', texto):
             tipo = "COMPRO"
 
-                print(
-                    f"tipo={tipo}, inmueble={tipo_inmueble}, ciudad={ciudad}, texto={texto}"
-                )
+        print(
+            
+            f"tipo={tipo}, inmueble={tipo_inmueble}, ciudad={ciudad}, texto={texto}"
+        )
 
         if tipo and es_inmobiliario:
 
