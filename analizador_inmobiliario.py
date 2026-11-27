@@ -1,11 +1,14 @@
 import re
 import psycopg2
+import os
 
 conn = psycopg2.connect(
-    host="TU_HOST",
-    database="TU_DB",
-    user="TU_USER",
-    password="TU_PASSWORD"
+    host=os.getenv("PGHOST"),
+    database=os.getenv("PGDATABASE"),
+    user=os.getenv("PGUSER"),
+    password=os.getenv("PGPASSWORD"),
+    port=os.getenv("PGPORT"),
+    sslmode="require"
 )
 
 cur = conn.cursor()
