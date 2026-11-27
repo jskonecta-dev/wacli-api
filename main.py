@@ -16,7 +16,7 @@ import codecs
 from PIL import Image
 import csv
 import io
-from analizador_inmobiliario import ejecutar_analizador
+from analizador_i2 import ejecutar_analizador
 from generador_matches import generar_matches
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
