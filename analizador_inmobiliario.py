@@ -123,6 +123,7 @@ def ejecutar_analizador():
                 msg[2],         # sender_name
                 tipo,
                 msg[3],         # descripcion
+                tipo_inmueble,
                 ciudad,
                 habitaciones,
                 monto
