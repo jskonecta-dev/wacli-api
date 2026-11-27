@@ -1,5 +1,6 @@
 import psycopg2
 import os
+import re
 
 def ejecutar_analizador():
 
@@ -17,12 +18,10 @@ def ejecutar_analizador():
     cur.execute("""
         SELECT
             message_id,
-            chat_name,
-            sender_name,
             text
         FROM messages
         ORDER BY message_id DESC
-        LIMIT 5
+        LIMIT 20
     """)
 
     mensajes = cur.fetchall()
@@ -34,13 +33,30 @@ def ejecutar_analizador():
 
     for msg in mensajes:
 
-        resultado.append({
-            "message_id": msg[0],
-            "chat": msg[1],
-            "sender": msg[2],
-            "texto": msg[3]
-        })
+        texto = (msg[1] or "").lower()
+
+        tipo = None
+
+        if re.search(r'\bvendo\b', texto):
+            tipo = "VENDO"
+
+        elif re.search(r'\bbusco\b', texto):
+            tipo = "BUSCO"
+
+        elif re.search(r'\balquilo\b', texto):
+            tipo = "ALQUILO"
+
+        elif re.search(r'\bcompro\b', texto):
+            tipo = "COMPRO"
+
+        if tipo:
+
+            resultado.append({
+                "message_id": msg[0],
+                "tipo": tipo,
+                "texto": msg[1]
+            })
 
     return {
-        "mensajes": resultado
+        "oportunidades_detectadas": resultado
     }
