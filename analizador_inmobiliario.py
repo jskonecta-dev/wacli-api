@@ -106,15 +106,17 @@ def ejecutar_analizador():
         
         tipo = None
 
-        if "vendo" in texto:
+        if re.search(r'\bvendo\b', texto):
             tipo = "VENDO"
-        elif "busco" in texto:
+        
+        elif re.search(r'\bbusco\b', texto):
             tipo = "BUSCO"
-        elif "alquilo" in texto:
+        
+        elif re.search(r'\balquilo\b', texto):
             tipo = "ALQUILO"
-        elif "compro" in texto:
+        
+        elif re.search(r'\bcompro\b', texto):
             tipo = "COMPRO"
-
         
         if tipo and es_inmobiliario:
             cur.execute("""
