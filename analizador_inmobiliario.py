@@ -84,7 +84,22 @@ def ejecutar_analizador():
         
         elif "oficina" in texto:
             tipo_inmueble = "OFICINA"
-
+        palabras_inmobiliarias = [
+            "casa",
+            "apartamento",
+            "habitacion",
+            "habitaciones",
+            "local",
+            "oficina",
+            "terreno",
+            "propiedad",
+            "inmueble"
+        ]
+        
+        es_inmobiliario = any(
+            palabra in texto
+            for palabra in palabras_inmobiliarias
+        )
 
 
 
@@ -100,8 +115,8 @@ def ejecutar_analizador():
         elif "compro" in texto:
             tipo = "COMPRO"
 
-        if tipo:
-
+        
+        if tipo and es_inmobiliario:
             cur.execute("""
             INSERT INTO oportunidades
             (
