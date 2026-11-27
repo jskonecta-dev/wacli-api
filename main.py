@@ -114,6 +114,9 @@ def extraer_datos_soporte(local_path):
             ]
         )
         texto = str(respuesta.choices[0].message.content)
+    except Exception as e:
+        print(f"Error OCR: {e}")
+        texto = ""
 # ============================
 # EXTRACTORES DE PAGO MÓVIL
 # ============================
