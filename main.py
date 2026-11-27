@@ -16,6 +16,8 @@ import codecs
 from PIL import Image
 import csv
 import io
+from analizador_inmobiliario import ejecutar_analizador
+
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -164,6 +166,12 @@ def extraer_banco(texto):
         if b in texto.lower():
             return b.capitalize()
     return ""
+# -----------------------------
+# debug analizador inmobiliario
+# -----------------------------
+@app.get("/debug_inmobiliario")
+def debug_inmobiliario():
+    return ejecutar_analizador()
 # -----------------------------
 # SELECCIONAR CHAT
 # -----------------------------
