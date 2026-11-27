@@ -117,8 +117,10 @@ def ejecutar_analizador():
         
         elif re.search(r'\bcompro\b', texto):
             tipo = "COMPRO"
-        
-        if tipo and es_inmobiliario:
+        print(
+            f"tipo={tipo}, inmueble={tipo_inmueble}, ciudad={ciudad}, texto={texto}"
+        )
+            if tipo and es_inmobiliario:
             cur.execute("""
             INSERT INTO oportunidades
             (
@@ -158,9 +160,7 @@ def ejecutar_analizador():
 
     cur.close()
     conn.close()
-    print(
-        f"tipo={tipo}, inmueble={tipo_inmueble}, ciudad={ciudad}, texto={texto}"
-    )
+    
     return {
         "mensajes_leidos": len(mensajes),
         "oportunidades_creadas": contador
