@@ -32,7 +32,43 @@ def ejecutar_analizador():
     for msg in mensajes:
 
         texto = (msg[3] or "").lower()
+        # Extraer habitaciones
+        habitaciones = None
+        
+        m = re.search(r'(\d+)\s*habitaciones?', texto)
+        
+        if m:
+            habitaciones = int(m.group(1))
+        
+        # Extraer monto
+        monto = None
+        
+        m = re.search(r'(\d{4,7})', texto)
+        
+        if m:
+            monto = float(m.group(1))
+        
+        # Extraer ciudad
+        ciudad = None
+        
+        ciudades = [
+            "doral",
+            "weston",
+            "miami",
+            "hialeah",
+            "kendall",
+            "coral gables"
+        ]
+        
+        for c in ciudades:
+            if c in texto:
+                ciudad = c.title()
+                break
 
+
+
+
+        
         tipo = None
 
         if "vendo" in texto:
@@ -53,16 +89,22 @@ def ejecutar_analizador():
                 chat_name,
                 sender_name,
                 tipo,
-                descripcion
+                descripcion,
+                ciudad,
+                habitaciones,
+                monto
             )
-            VALUES (%s,%s,%s,%s,%s)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
             """,
             (
-                msg[0],
-                msg[1],
-                msg[2],
+                msg[0],         # message_id
+                msg[1],         # chat_name
+                msg[2],         # sender_name
                 tipo,
-                msg[3]
+                msg[3],         # descripcion
+                ciudad,
+                habitaciones,
+                monto
             ))
 
             contador += 1
