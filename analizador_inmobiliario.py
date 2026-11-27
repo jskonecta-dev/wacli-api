@@ -89,16 +89,7 @@ def ejecutar_analizador():
         print(
             f"tipo={tipo}, inmueble={tipo_inmueble}, ciudad={ciudad}, texto={texto}"
         )
-        if (
-            tipo
-            and es_inmobiliario
-            and (
-                ciudad is not None
-                or habitaciones is not None
-                or tipo_inmueble is not None
-                or monto is not None
-            )
-        ):
+        if tipo and es_inmobiliario:
             cur.execute("""
             INSERT INTO oportunidades
             (
